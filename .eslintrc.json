@@ -1,0 +1,55 @@
+{
+  "root": true,
+  "env": {
+    "browser": true,
+    "es2022": true,
+    "worker": true
+  },
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "module"
+  },
+  "globals": {
+    "AudioContext": "readonly",
+    "webkitAudioContext": "readonly",
+    "OfflineAudioContext": "readonly",
+    "MediaRecorder": "readonly",
+    "MediaStream": "readonly",
+    "Blob": "readonly",
+    "File": "readonly",
+    "FileReader": "readonly",
+    "URL": "readonly",
+    "requestAnimationFrame": "readonly",
+    "cancelAnimationFrame": "readonly",
+    "setTimeout": "readonly",
+    "clearTimeout": "readonly",
+    "setInterval": "readonly",
+    "clearInterval": "readonly",
+    "getComputedStyle": "readonly",
+    "document": "readonly",
+    "window": "readonly",
+    "navigator": "readonly",
+    "console": "readonly",
+    "performance": "readonly",
+    "localStorage": "readonly",
+    "JSON": "readonly",
+    "DataView": "readonly",
+    "Uint8Array": "readonly",
+    "Int16Array": "readonly",
+    "ArrayBuffer": "readonly",
+    "NebulaStore": "writable",
+    "NebulaEngine": "writable",
+    "NebulaVisualizer": "writable"
+  },
+  "rules": {
+    "no-console": ["warn", { "allow": ["warn", "error", "info"] }],
+    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "no-var": "error",
+    "prefer-const": "warn",
+    "eqeqeq": ["error", "always"],
+    "no-eval": "error",
+    "no-implied-eval": "error",
+    "no-new-func": "error",
+    "strict": ["error", "global"]
+  }
+}

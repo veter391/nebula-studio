@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Nebula Studio 2.0 — Beat Maker</title>
+  <meta name="description" content="A production-grade, browser-based beat maker built entirely on the Web Audio API. Zero dependencies. Step sequencer, song mode, MIDI export, WAV export, virtual keyboard, tutorials." />
+  <meta name="theme-color" content="#0a0014" />
+
+  <meta property="og:title" content="Nebula Studio 2.0 — Beat Maker" />
+  <meta property="og:description" content="Production-grade web beat maker · Web Audio API · 0 dependencies" />
+  <meta property="og:type" content="website" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="src/styles.css" />
+  <link rel="icon" type="image/svg+xml" href="public/favicon.svg" />
+</head>
+<body>
+  <!-- Aurora background -->
+  <div class="aurora" aria-hidden="true">
+    <div class="aurora__layer aurora__layer--1"></div>
+    <div class="aurora__layer aurora__layer--2"></div>
+    <div class="aurora__layer aurora__layer--3"></div>
+    <div class="stars" id="stars" aria-hidden="true"></div>
+  </div>
+
+  <!-- Boot overlay -->
+  <div class="boot" id="boot">
+    <div class="boot__inner">
+      <div class="boot__core">
+        <div class="boot__ring"></div>
+        <div class="boot__ring boot__ring--2"></div>
+        <div class="boot__ring boot__ring--3"></div>
+        <div class="boot__dot"></div>
+      </div>
+      <h1 class="boot__title">NEBULA <span>STUDIO</span></h1>
+      <p class="boot__sub">Production-grade web beat maker · Web Audio API · 0 dependencies</p>
+      <button class="boot__btn" id="bootBtn">
+        <span class="boot__btn-glow"></span>
+        <span class="boot__btn-text">Enter the studio</span>
+        <span class="boot__btn-arrow">→</span>
+      </button>
+      <p class="boot__hint">Audio requires a click · headphones recommended</p>
+      <div class="boot__features">
+        <div class="boot__feature"><strong>12 voices</strong>Synth drums, bass, lead, pad</div>
+        <div class="boot__feature"><strong>4 visualizers</strong>Spectrum · OSC · Particles · Nebula</div>
+        <div class="boot__feature"><strong>WAV + MIDI</strong>Export to any DAW</div>
+        <div class="boot__feature"><strong>Song mode</strong>Chain A/B/C/D patterns</div>
+        <div class="boot__feature"><strong>Tutorials</strong>Interactive lessons built in</div>
+        <div class="boot__feature"><strong>0 deps</strong>Pure Web Audio · MIT licensed</div>
+      </div>
+    </div>
+  </div>
+
+  <main class="app" id="app" hidden>
+    <!-- Shell (header + tabs) — populated by ui/shell.js -->
+    <div id="shell"></div>
+
+    <!-- Pattern tab -->
+    <section class="tab-panel is-active" data-panel="pattern">
+      <div class="viz-wrap" id="vizHost"></div>
+      <section id="sequencerHost" class="seq"></section>
+      <section class="lower">
+        <div class="card" id="presetsHost"></div>
+        <div class="card" id="masterHost">
+          <header class="card__head">
+            <h2>MASTER FX</h2>
+            <span class="card__hint">chain: limiter → reverb → delay → filter</span>
+          </header>
+          <div class="master__knobs" id="masterKnobs"></div>
+          <div class="master__meters" id="meters">
+            <div class="meter"><div class="meter__fill" id="meterL"></div></div>
+            <div class="meter"><div class="meter__fill" id="meterR"></div></div>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <!-- Song tab -->
+    <section class="tab-panel" data-panel="song">
+      <div class="card" id="songHost"></div>
+    </section>
+
+    <!-- Keyboard tab -->
+    <section class="tab-panel" data-panel="keyboard">
+      <div class="card" id="keyboardHost"></div>
+      <div class="card" id="mixerHost" style="margin-top:16px"></div>
+    </section>
+
+    <!-- Learn tab -->
+    <section class="tab-panel" data-panel="learn">
+      <div class="card" id="learnHost"></div>
+    </section>
+
+    <footer class="foot">
+      <div class="foot__left">
+        <span class="foot__kbd">SPACE</span> play ·
+        <span class="foot__kbd">C</span> clear ·
+        <span class="foot__kbd">R</span> record ·
+        <span class="foot__kbd">E</span> WAV ·
+        <span class="foot__kbd">M</span> MIDI ·
+        <span class="foot__kbd">⌘Z</span> undo
+      </div>
+      <div class="foot__right">
+        Nebula Studio 2.0 ·
+        <a href="https://github.com" target="_blank" rel="noreferrer">View on GitHub</a>
+      </div>
+    </footer>
+  </main>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

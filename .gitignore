@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build artifacts (none today, but keep guard)
+dist/
+build/
+.cache/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Env / secrets
+.env
+.env.local
+
+# Tests / coverage (none yet, but future-proof)
+coverage/
+.nyc_output/
+
+# Local-only files
+*.local
