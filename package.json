@@ -43,10 +43,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/<you>/nebula-studio.git"
+    "url": "https://github.com/veter391/nebula-studio.git"
   },
   "bugs": {
-    "url": "https://github.com/<you>/nebula-studio/issues"
+    "url": "https://github.com/veter391/nebula-studio/issues"
   },
-  "homepage": "https://github.com/<you>/nebula-studio#readme"
+  "homepage": "https://github.com/veter391/nebula-studio#readme"
 }

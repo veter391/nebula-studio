@@ -61,16 +61,16 @@ export function mountShell(host, hooks = {}) {
 
       <div class="meta">
         <div class="meta__bpm">
-          <label>BPM</label>
+          <label for="bpm">BPM</label>
           <div class="bpm">
-            <button class="bpm__btn" data-bpm-delta="-5">−</button>
-            <input type="number" id="bpm" min="60" max="200" />
-            <button class="bpm__btn" data-bpm-delta="5">+</button>
+            <button class="bpm__btn" data-bpm-delta="-5" aria-label="Decrease BPM by 5">−</button>
+            <input type="number" id="bpm" min="60" max="200" aria-label="BPM (beats per minute)" />
+            <button class="bpm__btn" data-bpm-delta="5" aria-label="Increase BPM by 5">+</button>
           </div>
         </div>
         <div class="meta__swing">
-          <label>SWING <span id="swingVal">0%</span></label>
-          <input type="range" id="swing" min="0" max="60" />
+          <label for="swing">SWING <span id="swingVal">0%</span></label>
+          <input type="range" id="swing" min="0" max="60" aria-label="Swing amount" />
         </div>
       </div>
     </header>
@@ -173,9 +173,14 @@ export function mountShell(host, hooks = {}) {
     }
   });
   exportMidiBtn.addEventListener('click', () => {
-    const blob = engine.exportMIDI(store.get(), { bars: 4 });
-    downloadBlob(blob, `nebula-${Date.now()}.mid`);
-    showToast('MIDI exported · 4 bars');
+    try {
+      const blob = engine.exportMIDI(store.get(), { bars: 4 });
+      downloadBlob(blob, `nebula-${Date.now()}.mid`);
+      showToast('MIDI exported · 4 bars');
+    } catch (e) {
+      console.error(e);
+      showToast('MIDI export failed', 'error');
+    }
   });
   undoBtn.addEventListener('click', () => {
     if (store.undo()) showToast('Undo');

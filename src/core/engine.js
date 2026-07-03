@@ -165,7 +165,12 @@ export class AudioEngine extends Emitter {
     const synth = VOICES[tr.voice];
     if (!synth) return;
     const time = this.ctx.currentTime + 0.005;
-    synth(this.ctx, this.trackFx[trackId].input, time, opts);
+    try {
+      synth(this.ctx, this.trackFx[trackId].input, time, opts);
+    } catch (e) {
+      console.warn('[engine] trigger failed', trackId, e);
+      return;
+    }
     this.emit('trigger', { trackId, time, step: -1 });
   }
 
@@ -229,7 +234,12 @@ export class AudioEngine extends Emitter {
         const freqs = [180, 220, 160, 240];
         opts.freq = freqs[step % 4];
       }
-      synth(this.ctx, this.trackFx[tr.id].input, time, opts);
+      try {
+        synth(this.ctx, this.trackFx[tr.id].input, time, opts);
+      } catch (e) {
+        console.warn('[engine] step trigger failed', tr.id, 'step', step, e);
+        continue;
+      }
       this.emit('trigger', { trackId: tr.id, step, time });
     }
     this.emit('step', { step, time });
@@ -313,23 +323,43 @@ export class AudioEngine extends Emitter {
             const freqs = [180, 220, 160, 240];
             opts.freq = freqs[step % 4];
           }
-          VOICES[tr.voice](off, offlineTrackFx[tr.id].input, st, opts);
+          try {
+            VOICES[tr.voice](off, offlineTrackFx[tr.id].input, st, opts);
+          } catch (e) {
+            console.warn('[engine] export voice failed', tr.id, 'bar', bar, 'step', step, e);
+          }
         }
         t += stepDur;
       }
     }
 
-    const rendered = await off.startRendering();
-    return audioBufferToWav(rendered);
+    let rendered;
+    try {
+      rendered = await off.startRendering();
+    } catch (e) {
+      console.warn('[engine] offline render failed', e);
+      throw new Error('WAV render failed: ' + (e?.message || 'unknown error'));
+    }
+    try {
+      return audioBufferToWav(rendered);
+    } catch (e) {
+      console.warn('[engine] WAV encode failed', e);
+      throw new Error('WAV encode failed: ' + (e?.message || 'unknown error'));
+    }
   }
 
   /** Export current pattern as a MIDI blob. */
   exportMIDI(s, opts = {}) {
-    return patternToMidiBlob(s.pattern, {
-      bpm: s.bpm,
-      swing: s.swing,
-      bars: opts.bars ?? 4,
-    });
+    try {
+      return patternToMidiBlob(s.pattern, {
+        bpm: s.bpm,
+        swing: s.swing,
+        bars: opts.bars ?? 4,
+      });
+    } catch (e) {
+      console.warn('[engine] MIDI export failed', e);
+      throw new Error('MIDI export failed: ' + (e?.message || 'unknown error'));
+    }
   }
 
   startRecording() {

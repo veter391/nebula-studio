@@ -59,7 +59,11 @@ export class Scheduler extends Emitter {
       const swing = this.getSwing();
       const swingOff = this.currentStep % 2 === 1 ? stepDur * swing : 0;
       const t = this.nextStepTime + swingOff;
-      this.onStep(this.currentStep, t);
+      try {
+        this.onStep(this.currentStep, t);
+      } catch (e) {
+        console.warn('[scheduler] onStep failed at step', this.currentStep, e);
+      }
       this.emit('step', { step: this.currentStep, time: t });
       this.nextStepTime += stepDur;
       const total = this.getStepCount();

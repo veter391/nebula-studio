@@ -86,6 +86,10 @@ function chunk(type, data) {
  * @returns {Uint8Array}
  */
 export function patternToMidi(pattern, opts = {}) {
+  if (!pattern || typeof pattern !== 'object') {
+    throw new Error('patternToMidi: invalid pattern');
+  }
+
   const bpm = opts.bpm ?? 120;
   const swing = opts.swing ?? 0;
   const bars = opts.bars ?? 4;
@@ -173,5 +177,10 @@ export function patternToMidi(pattern, opts = {}) {
  * Wrap the result as a Blob.
  */
 export function patternToMidiBlob(pattern, opts) {
-  return new Blob([patternToMidi(pattern, opts)], { type: 'audio/midi' });
+  try {
+    return new Blob([patternToMidi(pattern, opts)], { type: 'audio/midi' });
+  } catch (e) {
+    console.warn('[midi-export] failed to build MIDI blob', e);
+    throw new Error('MIDI file construction failed: ' + (e?.message || 'unknown error'));
+  }
 }

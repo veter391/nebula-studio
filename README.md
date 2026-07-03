@@ -59,7 +59,7 @@ Zero dependencies. Zero build step. Zero servers — pure static files that you 
 
 ### Option A — open the file
 ```bash
-git clone https://github.com/<you>/nebula-studio.git
+git clone https://github.com/veter391/nebula-studio.git
 cd nebula-studio
 open index.html          # macOS
 xdg-open index.html      # Linux

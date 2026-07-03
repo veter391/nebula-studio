@@ -12,6 +12,10 @@
  * @returns {Blob}
  */
 export function audioBufferToWav(buffer) {
+  if (!buffer || typeof buffer.numberOfChannels !== 'number' || typeof buffer.length !== 'number') {
+    throw new Error('audioBufferToWav: invalid AudioBuffer');
+  }
+
   const numCh = buffer.numberOfChannels;
   const sampleRate = buffer.sampleRate;
   const length = buffer.length * numCh * 2 + 44;

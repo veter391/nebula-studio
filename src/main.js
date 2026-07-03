@@ -143,9 +143,11 @@ function mountMaster(host) {
     const knob = document.createElement('div');
     knob.className = 'knob';
     knob.dataset.param = k.param;
+    const knobId = `knob-${k.param}`;
     knob.innerHTML = `
-      <div class="knob__dial"><div class="knob__dot"></div></div>
-      <label>${k.label}</label>
+      <div class="knob__dial" id="${knobId}" role="slider" tabindex="0"
+        aria-label="${k.label}" aria-valuemin="${k.min}" aria-valuemax="${k.max}"><div class="knob__dot"></div></div>
+      <label for="${knobId}">${k.label}</label>
       <span class="knob__val">${k.val}</span>
     `;
     host.appendChild(knob);
@@ -161,6 +163,8 @@ function mountMaster(host) {
       dot.style.setProperty('--rot', deg + 'deg');
       if (k.param === 'filter') valEl.textContent = val >= 1000 ? (val / 1000).toFixed(1) + 'k' : Math.round(val);
       else valEl.textContent = Math.round(val);
+      dial.setAttribute('aria-valuenow', String(Math.round(val)));
+      dial.setAttribute('aria-valuetext', valEl.textContent);
       store.setMasterFx(k.param, k.param === 'master' ? val / 100 : k.param === 'filter' ? val : val / 100);
     }
     update();
@@ -193,6 +197,27 @@ function mountMaster(host) {
     dial.addEventListener('dblclick', () => {
       val = k.val;
       update();
+    });
+    dial.addEventListener('keydown', (e) => {
+      const range = k.max - k.min;
+      const step = range / 100;
+      if (e.key === 'ArrowUp' || e.key === 'ArrowRight') {
+        val = Math.max(k.min, Math.min(k.max, val + step));
+        update();
+        e.preventDefault();
+      } else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') {
+        val = Math.max(k.min, Math.min(k.max, val - step));
+        update();
+        e.preventDefault();
+      } else if (e.key === 'Home') {
+        val = k.min;
+        update();
+        e.preventDefault();
+      } else if (e.key === 'End') {
+        val = k.max;
+        update();
+        e.preventDefault();
+      }
     });
   });
 }

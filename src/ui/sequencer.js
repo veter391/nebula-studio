@@ -17,6 +17,8 @@ import { resolveVar } from '../utils.js';
 export function mountSequencer(host) {
   host.innerHTML = '';
   host.classList.add('seq');
+  host.setAttribute('role', 'group');
+  host.setAttribute('aria-label', '16-step sequencer grid — toggle steps to build a pattern for each track');
 
   TRACKS.forEach((tr, ti) => {
     const row = document.createElement('div');
@@ -47,9 +49,19 @@ export function mountSequencer(host) {
       cell.className = 'step' + (i % 4 === 0 ? ' is-beat' : '');
       cell.dataset.step = i;
       cell.style.setProperty('--track-color', color);
+      cell.setAttribute('role', 'button');
+      cell.setAttribute('tabindex', '0');
+      cell.setAttribute('aria-pressed', 'false');
+      cell.setAttribute('aria-label', `${tr.name} step ${i + 1}`);
       cell.addEventListener('click', (e) => {
         if (e.shiftKey) engine.trigger(tr.id);
         store.toggleCell(tr.id, i);
+      });
+      cell.addEventListener('keydown', (e) => {
+        if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault();
+          store.toggleCell(tr.id, i);
+        }
       });
       cell.addEventListener('contextmenu', (e) => {
         e.preventDefault();
@@ -84,7 +96,9 @@ export function mountSequencer(host) {
       const cells = row.querySelectorAll('.step');
       cells.forEach((cell) => {
         const step = +cell.dataset.step;
-        cell.classList.toggle('is-active', !!pattern[id][step]);
+        const active = !!pattern[id][step];
+        cell.classList.toggle('is-active', active);
+        cell.setAttribute('aria-pressed', String(active));
       });
     });
   });
@@ -93,7 +107,9 @@ export function mountSequencer(host) {
   host.querySelectorAll('.seq__row').forEach((row) => {
     const id = row.dataset.track;
     row.querySelectorAll('.step').forEach((cell, i) => {
-      cell.classList.toggle('is-active', !!pattern[id][i]);
+      const active = !!pattern[id][i];
+      cell.classList.toggle('is-active', active);
+      cell.setAttribute('aria-pressed', String(active));
     });
   });
 

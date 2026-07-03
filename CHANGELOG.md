@@ -4,7 +4,7 @@ All notable changes to Nebula Studio are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
-## [2.0.0] — 2025-02-18 — "Aurora"
+## [2.0.0] — 2026-06-27 — "Aurora"
 
 ### 🎉 Added
 - **ES module architecture** — clean separation of core / ui / data
@@ -42,6 +42,6 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 - No network requests at runtime — 100 % client-side
 - No third-party CDN scripts — fonts loaded with `crossorigin` from Google Fonts (optional)
 
-## [1.0.0] — 2025-01-20 — "Genesis"
+## [1.0.0] — 2026-06-26 — "Genesis"
 
 Initial release. 8 voices, 8 presets, single-pattern sequencer, WAV export, live recording.
