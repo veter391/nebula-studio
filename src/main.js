@@ -19,7 +19,7 @@ import { mountMixer } from './ui/mixer.js';
 import { mountVisualizer } from './ui/visualizer.js';
 import { mountPresets } from './ui/presets.js';
 import { mountSong } from './ui/song.js';
-import { mountKeyboard, isKeyboardModeActive } from './ui/keyboard.js';
+import { mountKeyboard, isKeyboardModeActive, setKeyboardModeExternal, onKeyboardModeChange } from './ui/keyboard.js';
 import { mountTutorials } from './ui/tutorials.js';
 import { mountPlayAlong } from './ui/play-along.js';
 import { TRACKS } from './data/tracks.js';
@@ -90,8 +90,29 @@ bootBtn.addEventListener('click', async () => {
   mountPlayAlong({
     pickerHost: document.getElementById('playAlongPicker'),
     stageHost: document.getElementById('playAlongStageHost'),
+    cueEl: document.getElementById('vizCue'),
+    cueKeyEl: document.getElementById('vizCueKey'),
+    cueNoteEl: document.getElementById('vizCueNote'),
     switchToPatternTab: () => store.setTab('pattern'),
   });
+
+  // ---------- Keyboard-mode toggle (bottom-left of the visualizer) ----------
+  // Lives on the main screen, not the topbar, so it's right next to where
+  // the practice cue appears. Stays in sync with the Keyboard tab's own
+  // toggle (and Escape) via onKeyboardModeChange.
+  const vizKbBtn = document.getElementById('vizKbToggle');
+  const vizKbLabel = document.getElementById('vizKbToggleLabel');
+  const syncVizKbBtn = (active) => {
+    vizKbBtn.classList.toggle('is-on', active);
+    vizKbBtn.setAttribute('aria-pressed', String(active));
+    vizKbLabel.textContent = active ? 'KEYS ON' : 'KEYS';
+    vizKbBtn.title = active
+      ? 'Keyboard mode on — your keyboard plays notes (Esc to exit)'
+      : 'Enable keyboard mode — play notes with your computer keyboard';
+  };
+  vizKbBtn.addEventListener('click', () => setKeyboardModeExternal(!isKeyboardModeActive()));
+  onKeyboardModeChange(syncVizKbBtn);
+  syncVizKbBtn(isKeyboardModeActive());
 
   // connect engine events to visualizer
   engine.on('trigger', (e) => viz.onTrigger(e.trackId, e.step, e.time));
@@ -266,11 +287,17 @@ function mountMaster(host) {
 }
 
 /* ---------- Level meters ---------- */
-const meterL = document.getElementById('meterL');
-const meterR = document.getElementById('meterR');
-const hudStep = document.getElementById('hudStep');
-const hudLevel = document.getElementById('hudLevel');
 function startMeterLoop() {
+  // Look these up here, not at module load: #hudStep/#hudLevel are created
+  // by the visualizer's markup during boot, so at module-eval time they
+  // don't exist yet. startMeterLoop runs after mountVisualizer, so they're
+  // present now. (#meterL/#meterR are static in index.html but captured
+  // here too for consistency.) Guarded so a missing node can never throw
+  // inside the requestAnimationFrame loop.
+  const meterL = document.getElementById('meterL');
+  const meterR = document.getElementById('meterR');
+  const hudStep = document.getElementById('hudStep');
+  const hudLevelSpan = document.getElementById('hudLevel')?.querySelector('span');
   const bufL = new Uint8Array(engine.analyserL.frequencyBinCount);
   const bufR = new Uint8Array(engine.analyserR.frequencyBinCount);
   function loop() {
@@ -281,11 +308,11 @@ function startMeterLoop() {
     for (let i = 0; i < bufR.length; i++) rSum += bufR[i];
     const lv = (lSum / bufL.length / 255) * 100;
     const rv = (rSum / bufR.length / 255) * 100;
-    meterL.style.right = 100 - lv + '%';
-    meterR.style.right = 100 - rv + '%';
-    hudLevel.querySelector('span').textContent = Math.round(Math.max(lv, rv));
+    if (meterL) meterL.style.right = 100 - lv + '%';
+    if (meterR) meterR.style.right = 100 - rv + '%';
+    if (hudLevelSpan) hudLevelSpan.textContent = Math.round(Math.max(lv, rv));
     const step = engine.scheduler?.currentStep ?? -1;
-    hudStep.textContent = step >= 0 ? `${step + 1} / 16` : '— / 16';
+    if (hudStep) hudStep.textContent = step >= 0 ? `${step + 1} / 16` : '— / 16';
     requestAnimationFrame(loop);
   }
   loop();

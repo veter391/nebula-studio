@@ -38,10 +38,13 @@ const HIT_WINDOW_BEATS = 0.6; // how close (in beats) a keypress must land to co
 /**
  * @param {Object} opts
  * @param {HTMLElement} opts.pickerHost - where the song list renders (Learn tab)
- * @param {HTMLElement} opts.stageHost - where the active practice bar renders (Pattern tab, bottom)
+ * @param {HTMLElement} opts.stageHost - where the scrolling timeline/score renders (Pattern tab, below the visualizer)
+ * @param {HTMLElement} opts.cueEl - the "press this key now" overlay on the visualizer (shown/hidden per session)
+ * @param {HTMLElement} opts.cueKeyEl - the big key-letter element inside the cue
+ * @param {HTMLElement} opts.cueNoteEl - the small note-name element inside the cue
  * @param {() => void} opts.switchToPatternTab - switches the app to the Pattern tab
  */
-export function mountPlayAlong({ pickerHost, stageHost, switchToPatternTab }) {
+export function mountPlayAlong({ pickerHost, stageHost, cueEl, cueKeyEl, cueNoteEl, switchToPatternTab }) {
   pickerHost.innerHTML = SONGS.map(
     (s) => `
       <button class="pa__song" data-song="${s.id}">
@@ -55,19 +58,12 @@ export function mountPlayAlong({ pickerHost, stageHost, switchToPatternTab }) {
     <div class="pa__stage" id="paStage" hidden>
       <div class="pa__stage-head">
         <span class="pa__stage-title" id="paSongName">—</span>
+        <span class="pa__score" id="paScore">0 hit · 0 missed</span>
         <button class="ai-btn" id="paStop">Stop practice</button>
-      </div>
-      <div class="pa__now">
-        <span class="pa__now-label">NOW</span>
-        <span class="pa__now-key" id="paNowKey">—</span>
-        <span class="pa__now-note" id="paNowNote"></span>
       </div>
       <div class="pa__highway" id="paHighway">
         <div class="pa__playhead"></div>
         <div class="pa__lane" id="paLane"></div>
-      </div>
-      <div class="pa__controls">
-        <span class="pa__score" id="paScore">0 hit · 0 missed</span>
       </div>
     </div>
   `;
@@ -75,8 +71,6 @@ export function mountPlayAlong({ pickerHost, stageHost, switchToPatternTab }) {
   const stage = stageHost.querySelector('#paStage');
   const songNameEl = stageHost.querySelector('#paSongName');
   const lane = stageHost.querySelector('#paLane');
-  const nowKeyEl = stageHost.querySelector('#paNowKey');
-  const nowNoteEl = stageHost.querySelector('#paNowNote');
   const scoreEl = stageHost.querySelector('#paScore');
   const stopBtn = stageHost.querySelector('#paStop');
 
@@ -148,6 +142,7 @@ export function mountPlayAlong({ pickerHost, stageHost, switchToPatternTab }) {
     });
 
     stage.hidden = false;
+    cueEl.hidden = false;
     tick();
   }
 
@@ -161,15 +156,15 @@ export function mountPlayAlong({ pickerHost, stageHost, switchToPatternTab }) {
     const current = session.song.notes.find((n) => beatsElapsed >= n.beat && beatsElapsed < n.beat + n.duration);
     if (current) {
       // The physical key is the primary, glanceable info -- big; the note
-      // name is secondary reference info -- small. Same principle as the
-      // on-screen piano keys.
+      // name is secondary reference info -- small. Shown as an overlay on
+      // the visualizer so the prompt is front-and-centre while you play.
       const semitone = current.midi - 60;
       const key = semitone >= 0 && semitone <= 23 ? keyForSemitone(semitone) : null;
-      nowKeyEl.textContent = key ? key.toUpperCase() : '?';
-      nowNoteEl.textContent = midiToName(current.midi);
+      cueKeyEl.textContent = key ? key.toUpperCase() : '?';
+      cueNoteEl.textContent = midiToName(current.midi);
     } else {
-      nowKeyEl.textContent = '—';
-      nowNoteEl.textContent = '';
+      cueKeyEl.textContent = '·';
+      cueNoteEl.textContent = '';
     }
 
     // Count any note whose window has fully passed without a hit as missed, once.
@@ -205,6 +200,7 @@ export function mountPlayAlong({ pickerHost, stageHost, switchToPatternTab }) {
     store.set({ pattern: session.wasPattern, bpm: session.wasBpm, swing: session.wasSwing });
     session = null;
     stage.hidden = true;
+    cueEl.hidden = true;
   }
 
   function msToBeats(ms, bpm) {

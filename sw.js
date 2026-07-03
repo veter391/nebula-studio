@@ -3,20 +3,28 @@
  * loaded at least once. This is a real fit for a browser beat maker (make
  * music with no connection), not decorative PWA boilerplate.
  *
- * Strategy: cache-first for same-origin GET requests, with a network
- * fallback that also updates the cache (stale-while-revalidate). No
- * hardcoded file manifest to keep in sync with the source tree -- every
- * asset the app actually requests gets cached the first time it's
- * fetched, so this never goes stale as files are added/renamed.
+ * Strategy: NETWORK-FIRST for same-origin GET requests, with the cache as
+ * an offline fallback. An online visitor ALWAYS gets the freshly deployed
+ * version; the cache only kicks in when the network fails (genuinely
+ * offline). This is deliberately not cache-first: an earlier version of
+ * this worker was cache-first, which trapped visitors on whatever version
+ * they first loaded and made new deploys invisible until the cache name
+ * changed -- a classic service-worker footgun. Network-first trades a
+ * little load latency (tiny JS files off Cloudflare's edge) for never
+ * serving stale app code to someone who is online.
  *
- * Explicitly NOT cached: the /api/ai proxy (must always hit the network --
- * caching an AI response would be actively wrong) and cross-origin
- * requests (Google Fonts, OpenRouter direct calls in BYOK mode).
+ * Explicitly NOT handled here: the /api/ai proxy (must always hit the
+ * network fresh -- caching an AI response would be actively wrong) and
+ * cross-origin requests (Google Fonts, OpenRouter direct calls in BYOK
+ * mode), which fall through to the browser's normal handling.
  *
  * @module sw
  */
 
-const CACHE_NAME = 'nebula-studio-v1';
+// Bump this whenever the caching STRATEGY changes -- activate deletes any
+// cache whose name doesn't match, so bumping it force-flushes visitors who
+// were stuck on the previous (cache-first) worker.
+const CACHE_NAME = 'nebula-studio-v2-netfirst';
 
 self.addEventListener('install', (_event) => {
   self.skipWaiting();
@@ -24,9 +32,11 @@ self.addEventListener('install', (_event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))))
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
@@ -38,18 +48,19 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname === '/api/ai') return; // never cache AI responses
 
   event.respondWith(
-    caches.open(CACHE_NAME).then(async (cache) => {
-      const cached = await cache.match(request);
-      const networkFetch = fetch(request)
-        .then((response) => {
-          if (response.ok) cache.put(request, response.clone());
-          return response;
-        })
-        .catch(() => cached);
-
-      // Cache-first when we have it (instant offline load); otherwise wait
-      // on the network and cache the result for next time.
-      return cached || networkFetch;
-    })
+    (async () => {
+      const cache = await caches.open(CACHE_NAME);
+      try {
+        // Network first: an online visitor always gets the latest deploy.
+        const response = await fetch(request);
+        if (response.ok) cache.put(request, response.clone());
+        return response;
+      } catch {
+        // Offline (or network error) -- fall back to the last cached copy.
+        const cached = await cache.match(request);
+        if (cached) return cached;
+        throw new Error('offline and not cached');
+      }
+    })()
   );
 });

@@ -365,14 +365,6 @@ input, button, select, textarea { outline: none; }
   color: var(--c-rose);
   animation: recPulse 1.2s ease-in-out infinite;
 }
-/* Generic "toggled on" accent state — same visual language as is-playing,
-   without implying playback (used by the Keyboard Mode shortcut button). */
-.t-btn.is-active-accent {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  color: var(--accent);
-  box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 55%, transparent);
-}
 .t-btn.is-recording .rec-dot {
   background: var(--c-rose);
   box-shadow: 0 0 10px var(--c-rose);
@@ -507,6 +499,69 @@ input[type="range"]::-moz-range-thumb {
   overflow: hidden;
   background: color-mix(in srgb, #000 40%, transparent);
   backdrop-filter: blur(20px);
+}
+/* The visualizer (canvas + its HUD) renders into this; it fills the wrap
+   so the play-along cue and keyboard toggle can overlay on top of it. */
+.viz-host { position: absolute; inset: 0; }
+
+/* Play Along cue — the big "press this key" letter over the visualizer. */
+.viz-cue {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 20px;
+  background: color-mix(in srgb, #000 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
+  border-radius: 999px;
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+  z-index: 3;
+}
+.viz-cue__key {
+  font-family: var(--font-mono);
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent);
+  text-shadow: 0 0 18px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+.viz-cue__note {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+/* Keyboard-mode toggle — bottom-left corner of the visualizer window. */
+.viz-kb-toggle {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: color-mix(in srgb, #000 60%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  backdrop-filter: blur(8px);
+  transition: color 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.viz-kb-toggle svg { width: 15px; height: 15px; fill: currentColor; }
+.viz-kb-toggle:hover { color: var(--text); border-color: var(--line-strong); }
+.viz-kb-toggle.is-on {
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 .viz {
   position: absolute;
@@ -2011,32 +2066,6 @@ input[type="range"]::-moz-range-thumb {
   text-transform: uppercase;
 }
 
-.pa__now {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-.pa__now-label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  color: var(--text-mute);
-}
-/* Key-first, note-second -- same principle as the on-screen piano keys:
-   the physical key to press is the primary, glanceable info. */
-.pa__now-key {
-  font-family: var(--font-mono);
-  font-size: 32px;
-  font-weight: 700;
-  color: var(--accent);
-}
-.pa__now-note {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text-dim);
-}
-
 .pa__highway {
   position: relative;
   height: 64px;
@@ -2103,6 +2132,6 @@ input[type="range"]::-moz-range-thumb {
 }
 
 @media (max-width: 800px) {
-  .pa__now-key { font-size: 24px; }
+  .viz-cue__key { font-size: 30px; }
   .pa__highway { height: 56px; }
 }

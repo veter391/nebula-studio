@@ -70,7 +70,23 @@
 
     <!-- Pattern tab -->
     <section class="tab-panel is-active" data-panel="pattern">
-      <div class="viz-wrap" id="vizHost"></div>
+      <div class="viz-wrap">
+        <!-- visualizer canvas + its own HUD render into here -->
+        <div class="viz-host" id="vizHost"></div>
+        <!-- Play Along cue: the big "press this key now" letter, overlaid on
+             the visualizer so the practice prompt is front-and-centre.
+             Hidden until an exercise is running. -->
+        <div class="viz-cue" id="vizCue" hidden>
+          <span class="viz-cue__key" id="vizCueKey">—</span>
+          <span class="viz-cue__note" id="vizCueNote"></span>
+        </div>
+        <!-- Keyboard-mode toggle, bottom-left corner of the visualizer -->
+        <button class="viz-kb-toggle" id="vizKbToggle" type="button" aria-pressed="false"
+          title="Enable keyboard mode — play notes with your computer keyboard">
+          <svg viewBox="0 0 24 24"><path d="M3 6h18v12H3zm2 2v8h2v-2h2v2h2v-8h2v2h2v-2h2v8h2v-2h2v2h2V8z"/></svg>
+          <span id="vizKbToggleLabel">KEYS</span>
+        </button>
+      </div>
       <section id="sequencerHost" class="seq"></section>
       <section class="lower">
         <div class="card" id="presetsHost"></div>
