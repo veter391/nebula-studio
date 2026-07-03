@@ -8,6 +8,7 @@ import { store } from '../store.js';
 import { engine } from '../core/engine.js';
 import { THEMES } from '../data/themes.js';
 import { downloadBlob } from '../utils.js';
+import { isKeyboardModeActive, setKeyboardModeExternal, onKeyboardModeChange } from './keyboard.js';
 
 /** Mount all shell components. Returns cleanup function. */
 export function mountShell(host, hooks = {}) {
@@ -17,7 +18,7 @@ export function mountShell(host, hooks = {}) {
         <div class="brand__mark" aria-hidden="true"><span></span><span></span><span></span></div>
         <div class="brand__text">
           <h1>NEBULA <em>STUDIO</em></h1>
-          <p>v2.0 · Web Audio · 0 deps</p>
+          <p>v2.9 · Web Audio · 0 deps</p>
         </div>
       </div>
 
@@ -54,6 +55,10 @@ export function mountShell(host, hooks = {}) {
         <button class="t-btn" id="clearBtn" title="Clear pattern">
           <svg viewBox="0 0 24 24" class="ico"><path d="M6 7h12v13a2 2 0 01-2 2H8a2 2 0 01-2-2V7zm3-4h6l1 2h4v2H4V5h4l1-2z"/></svg>
           <span class="t-btn__label">CLEAR</span>
+        </button>
+        <button class="t-btn" id="kbModeShortcutBtn" title="Enable keyboard mode — play notes with your computer keyboard" aria-pressed="false">
+          <svg viewBox="0 0 24 24" class="ico"><path d="M3 6h18v12H3zm2 2v8h2v-2h2v2h2v-8h2v2h2v-2h2v8h2v-2h2v2h2V8z"/></svg>
+          <span class="t-btn__label">KEYS</span>
         </button>
       </div>
 
@@ -142,6 +147,22 @@ export function mountShell(host, hooks = {}) {
     store.clearPattern();
     showToast('Pattern cleared');
   });
+
+  // ---------- Keyboard Mode shortcut (also toggleable from the Keyboard tab
+  // itself; this button and that one stay in sync via onKeyboardModeChange
+  // regardless of which one — or Escape — actually changed the mode) ----------
+  const kbModeBtn = host.querySelector('#kbModeShortcutBtn');
+  const syncKbModeBtn = (active) => {
+    kbModeBtn.classList.toggle('is-active-accent', active);
+    kbModeBtn.setAttribute('aria-pressed', String(active));
+    kbModeBtn.title = active
+      ? 'Keyboard mode on — your keyboard plays notes (Esc to exit)'
+      : 'Enable keyboard mode — play notes with your computer keyboard';
+    kbModeBtn.querySelector('.t-btn__label').textContent = active ? 'KEYS ON' : 'KEYS';
+  };
+  kbModeBtn.addEventListener('click', () => setKeyboardModeExternal(!isKeyboardModeActive()));
+  onKeyboardModeChange(syncKbModeBtn);
+  syncKbModeBtn(isKeyboardModeActive());
   recBtn.addEventListener('click', async () => {
     if (engine.recorder?.isRecording) {
       const blob = await engine.stopRecording();

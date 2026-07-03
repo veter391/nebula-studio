@@ -18,22 +18,20 @@ import { store } from '../store.js';
 import { engine } from '../core/engine.js';
 import { midiToName, CHORD_TYPES } from '../utils.js';
 
-// Two physical rows mimicking a real piano's white/black key layout,
-// covering the full 24-semitone (2-octave) range drawn by renderKeys():
-//   lower row (zxcv...)  -> semitones 0-11  (octave N)
-//   upper row (qwer...)  -> semitones 12-23 (octave N+1)
-// Row 2 (asdf...) fills in the black keys for row 1, row 3 (1234...)
-// fills in the black keys for row 2 — same idea DAWs use for computer-
-// keyboard input (bottom-left = lower white keys, row above = sharps).
+// One continuous chromatic run, not scattered across unrelated key groups:
+// the bottom row (z through /) plays semitones 0-16 in a single unbroken
+// sequence, alternating between the bottom letter row (white keys) and the
+// row directly above it (black keys) -- the same "Z=C, S=C#, X=D..."
+// convention most DAWs/web synths use for a QWERTY-as-piano layout, so it
+// reads as one flowing row, not a grid of unrelated letters.
+// When that single row runs out (17 semitones -- a bit over an octave),
+// the SAME alternating pattern continues one row up (q through r), exactly
+// mirroring the bottom row's logic rather than switching to a different
+// scheme, so it still reads as "another row, same idea" rather than random.
 const KEY_MAP = {
-  // octave N — white keys
-  z: 0, x: 2, c: 4, v: 5, b: 7, n: 9, m: 11,
-  // octave N — black keys
-  s: 1, d: 3, g: 6, h: 8, j: 10,
-  // octave N+1 — white keys
-  q: 12, w: 14, e: 16, r: 17, t: 19, y: 21, u: 23,
-  // octave N+1 — black keys (note: no black key between semitones 16/17 = E/F)
-  2: 13, 3: 15, 5: 18, 6: 20, 7: 22,
+  z: 0, s: 1, x: 2, d: 3, c: 4, v: 5, g: 6, b: 7, h: 8, n: 9, j: 10, m: 11,
+  ',': 12, l: 13, '.': 14, ';': 15, '/': 16,
+  q: 17, 2: 18, w: 19, 3: 20, e: 21, 4: 22, r: 23,
 };
 
 const SEMITONE_TO_KEY = Object.fromEntries(Object.entries(KEY_MAP).map(([k, semitone]) => [semitone, k]));
@@ -49,10 +47,21 @@ export function keyForSemitone(semitone) {
 
 let keyboardModeActive = false;
 let externalModeSetter = null;
+const modeChangeListeners = new Set();
 
 /** Whether the computer-keyboard note input is currently capturing letter keys. */
 export function isKeyboardModeActive() {
   return keyboardModeActive;
+}
+
+/**
+ * Subscribe to Keyboard Mode on/off changes, regardless of which UI
+ * triggered the change (the Keyboard tab's own toggle, Escape, or the
+ * shortcut button elsewhere in the shell). Returns an unsubscribe function.
+ */
+export function onKeyboardModeChange(fn) {
+  modeChangeListeners.add(fn);
+  return () => modeChangeListeners.delete(fn);
 }
 
 /**
@@ -145,7 +154,7 @@ export function mountKeyboard(host) {
       k.dataset.midi = m;
       k.style.width = `calc(${whiteWidth}% - 4px)`;
       k.style.left = `calc(${idx * whiteWidth}% + 2px)`;
-      k.innerHTML = `<span class="kb-key__label">${midiToName(m)}</span>`;
+      k.innerHTML = renderKeyLabel(m, startMidi);
       bindKeyPointerEvents(k, m);
       keysEl.appendChild(k);
     });
@@ -159,10 +168,24 @@ export function mountKeyboard(host) {
       k.dataset.midi = m;
       k.style.width = `calc(${whiteWidth * 0.6}% - 4px)`;
       k.style.left = `calc(${idx * whiteWidth + whiteWidth * 0.7}% + 2px)`;
-      k.innerHTML = `<span class="kb-key__label">${midiToName(m)}</span>`;
+      k.innerHTML = renderKeyLabel(m, startMidi);
       bindKeyPointerEvents(k, m);
       keysEl.appendChild(k);
     }
+  }
+
+  // The physical key you actually need to press is the primary, glanceable
+  // information (big, centered); the note name is secondary reference info
+  // (small, tucked in a corner) -- the reverse of the old layout, which
+  // only ever showed the note name and made you hunt for the right key.
+  function renderKeyLabel(midi, startMidi) {
+    const semitone = midi - startMidi;
+    const key = semitone >= 0 && semitone <= 23 ? keyForSemitone(semitone) : null;
+    const keyLabel = key ? key.toUpperCase() : '';
+    return `
+      <span class="kb-key__note">${midiToName(midi)}</span>
+      <span class="kb-key__letter">${keyLabel}</span>
+    `;
   }
 
   function bindKeyPointerEvents(el, midi) {
@@ -266,6 +289,7 @@ export function mountKeyboard(host) {
     modeStatusEl.hidden = !active;
     host.classList.toggle('kb--mode-active', active);
     if (!active) releaseAllNotes();
+    modeChangeListeners.forEach((fn) => fn(active));
   }
 
   modeToggleEl.addEventListener('click', () => setKeyboardMode(!keyboardModeActive));

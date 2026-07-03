@@ -87,7 +87,11 @@ bootBtn.addEventListener('click', async () => {
   mountSong(document.getElementById('songHost'));
   mountKeyboard(document.getElementById('keyboardHost'));
   mountTutorials(document.getElementById('learnHost'));
-  mountPlayAlong(document.getElementById('playAlongHost'));
+  mountPlayAlong({
+    pickerHost: document.getElementById('playAlongPicker'),
+    stageHost: document.getElementById('playAlongStageHost'),
+    switchToPatternTab: () => store.setTab('pattern'),
+  });
 
   // connect engine events to visualizer
   engine.on('trigger', (e) => viz.onTrigger(e.trackId, e.step, e.time));
@@ -295,7 +299,7 @@ window.addEventListener('beforeunload', () => {
 
 /* ---------- Boot logs (only in dev) ---------- */
 console.info(
-  '%c🌌 Nebula Studio 2.0',
+  '%c🌌 Nebula Studio 2.9',
   'font: 700 16px sans-serif; color: #00f5ff;',
   '\nZero dependencies · MIT licensed · Web Audio API · ' +
     `${TRACKS.length} voices`

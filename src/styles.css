@@ -365,6 +365,14 @@ input, button, select, textarea { outline: none; }
   color: var(--c-rose);
   animation: recPulse 1.2s ease-in-out infinite;
 }
+/* Generic "toggled on" accent state — same visual language as is-playing,
+   without implying playback (used by the Keyboard Mode shortcut button). */
+.t-btn.is-active-accent {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 55%, transparent);
+}
 .t-btn.is-recording .rec-dot {
   background: var(--c-rose);
   box-shadow: 0 0 10px var(--c-rose);
@@ -1389,9 +1397,8 @@ input[type="range"]::-moz-range-thumb {
   border-radius: 0 0 6px 6px;
   border: 1px solid rgba(0,0,0,0.1);
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
-  padding-bottom: 6px;
   transition: all 0.1s;
 }
 .kb-key:hover { background: linear-gradient(180deg, white, #e0e0ec); }
@@ -1400,12 +1407,27 @@ input[type="range"]::-moz-range-thumb {
   transform: translateY(2px);
   box-shadow: 0 0 16px var(--accent);
 }
-.kb-key__label {
+/* The physical key to press is the primary, glanceable info -- big,
+   centered. The note name is secondary reference info, tucked in a
+   corner, small. (Previously it was the other way around: only the note
+   name was shown, so you had to already know which key played it.) */
+.kb-key__letter {
   font-family: var(--font-mono);
-  font-size: 8.5px;
+  font-size: 15px;
   font-weight: 700;
-  color: rgba(0,0,0,0.5);
-  letter-spacing: 0.04em;
+  color: rgba(0,0,0,0.65);
+  letter-spacing: 0.02em;
+  pointer-events: none;
+}
+.kb-key__note {
+  position: absolute;
+  top: 4px;
+  left: 5px;
+  font-family: var(--font-mono);
+  font-size: 7px;
+  font-weight: 600;
+  color: rgba(0,0,0,0.35);
+  letter-spacing: 0.02em;
   pointer-events: none;
 }
 .kb-key--black {
@@ -1420,7 +1442,8 @@ input[type="range"]::-moz-range-thumb {
   background: linear-gradient(180deg, var(--accent-2), color-mix(in srgb, var(--accent-2) 50%, black));
   box-shadow: 0 0 16px var(--accent-2);
 }
-.kb-key--black .kb-key__label { color: rgba(255,255,255,0.5); }
+.kb-key--black .kb-key__letter { color: rgba(255,255,255,0.75); font-size: 12px; }
+.kb-key--black .kb-key__note { color: rgba(255,255,255,0.4); }
 
 .kb__chords {
   display: flex;
@@ -1966,6 +1989,28 @@ input[type="range"]::-moz-range-thumb {
 .pa__song-name { display: block; font-weight: 600; color: var(--text); margin-bottom: 4px; }
 .pa__song-desc { display: block; font-size: 11.5px; color: var(--text-dim); line-height: 1.4; }
 
+.pa__stage {
+  margin-top: 16px;
+  padding: 16px;
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+  border-radius: var(--radius-md);
+}
+.pa__stage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.pa__stage-title {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text);
+  text-transform: uppercase;
+}
+
 .pa__now {
   display: flex;
   align-items: baseline;
@@ -1978,13 +2023,15 @@ input[type="range"]::-moz-range-thumb {
   letter-spacing: 0.16em;
   color: var(--text-mute);
 }
-.pa__now-note {
+/* Key-first, note-second -- same principle as the on-screen piano keys:
+   the physical key to press is the primary, glanceable info. */
+.pa__now-key {
   font-family: var(--font-mono);
-  font-size: 28px;
+  font-size: 32px;
   font-weight: 700;
   color: var(--accent);
 }
-.pa__now-key {
+.pa__now-note {
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--text-dim);
@@ -2027,11 +2074,22 @@ input[type="range"]::-moz-range-thumb {
   border: 1px solid var(--accent);
   border-radius: var(--radius-sm);
   font-family: var(--font-mono);
-  font-size: 11px;
   color: var(--text);
 }
 .pa__note.is-hit { background: color-mix(in srgb, var(--c-lime) 30%, transparent); border-color: var(--c-lime); }
 .pa__note.is-miss { background: color-mix(in srgb, var(--c-rose) 20%, transparent); border-color: var(--c-rose); opacity: 0.6; }
+/* Letter (which key to press) is the dominant label; note name is small
+   reference info tucked in the corner -- same key-first hierarchy as
+   the on-screen piano keys and the NOW indicator above. */
+.pa__note-letter { font-size: 13px; font-weight: 700; }
+.pa__note-name {
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  font-size: 7px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
 
 .pa__controls {
   display: flex;
@@ -2045,6 +2103,6 @@ input[type="range"]::-moz-range-thumb {
 }
 
 @media (max-width: 800px) {
-  .pa__now-note { font-size: 22px; }
+  .pa__now-key { font-size: 24px; }
   .pa__highway { height: 56px; }
 }

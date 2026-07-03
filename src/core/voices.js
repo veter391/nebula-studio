@@ -51,10 +51,10 @@ export function kick(ctx, dest, t, opts = {}) {
   sub.frequency.exponentialRampToValueAtTime(35, t + 0.25);
   og.gain.setValueAtTime(0, t);
   og.gain.linearRampToValueAtTime(1.0, t + 0.003);
-  og.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+  og.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
   subG.gain.setValueAtTime(0, t);
   subG.gain.linearRampToValueAtTime(0.6, t + 0.005);
-  subG.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+  subG.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
 
   // Click transient
   const click = ctx.createOscillator();
@@ -67,8 +67,13 @@ export function kick(ctx, dest, t, opts = {}) {
   osc.connect(og).connect(dest);
   sub.connect(subG).connect(dest);
   click.connect(cg).connect(dest);
-  osc.start(t); osc.stop(t + 0.5);
-  sub.start(t); sub.stop(t + 0.6);
+  // Release tails were originally 450-550ms -- fine at slow tempos, but at
+  // 132-174 BPM (techno/trap/drum-and-bass) steps land as little as 86ms
+  // apart, so consecutive kicks stacked their decaying tails on top of each
+  // other and turned into low-end mud. Tightened to stay clear of the next
+  // hit across the whole BPM range the app actually uses.
+  osc.start(t); osc.stop(t + 0.2);
+  sub.start(t); sub.stop(t + 0.25);
   click.start(t); click.stop(t + 0.04);
 }
 
@@ -177,9 +182,9 @@ export function tom(ctx, dest, t, opts = {}) {
   osc.frequency.exponentialRampToValueAtTime(f, t + 0.12);
   g.gain.setValueAtTime(0, t);
   g.gain.linearRampToValueAtTime(0.8, t + 0.003);
-  g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.22); // was 0.4 -- same fast-tempo overlap fix as kick
   osc.connect(g).connect(dest);
-  osc.start(t); osc.stop(t + 0.45);
+  osc.start(t); osc.stop(t + 0.25);
 }
 
 /** Rim — short tonal click. */
@@ -213,9 +218,9 @@ export function sub(ctx, dest, t, opts = {}) {
   osc.frequency.value = freq;
   g.gain.setValueAtTime(0, t);
   g.gain.linearRampToValueAtTime(0.7, t + 0.005);
-  g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.3); // was 0.4 -- same fast-tempo overlap fix as kick
   osc.connect(g).connect(dest);
-  osc.start(t); osc.stop(t + 0.45);
+  osc.start(t); osc.stop(t + 0.32);
 }
 
 /** Bass — saw + sub + LP envelope. */
@@ -236,13 +241,13 @@ export function bass(ctx, dest, t, opts = {}) {
 
   g.gain.setValueAtTime(0, t);
   g.gain.linearRampToValueAtTime(0.65, t + 0.005);
-  g.gain.exponentialRampToValueAtTime(0.001, t + 0.38);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.3); // was 0.38 -- same fast-tempo overlap fix as kick
 
   osc.connect(lp);
   sub.connect(lp);
   lp.connect(g).connect(dest);
-  osc.start(t); osc.stop(t + 0.42);
-  sub.start(t); sub.stop(t + 0.42);
+  osc.start(t); osc.stop(t + 0.32);
+  sub.start(t); sub.stop(t + 0.32);
 }
 
 /** Lead — square + detuned saw + vibrato + LP envelope. */
@@ -295,15 +300,18 @@ export function pluck(ctx, dest, t, opts = {}) {
   osc2.frequency.value = freq * 2;
   g.gain.setValueAtTime(0, t);
   g.gain.linearRampToValueAtTime(0.55, t + 0.002);
-  g.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+  // 0.45s was too long for both a "pluck" character and fast-tempo overlap
+  // -- a pluck should decay quickly regardless of BPM, this was a sound-
+  // design miss independent of the tempo issue affecting the other voices.
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
   const g2 = ctx.createGain();
   g2.gain.setValueAtTime(0, t);
   g2.gain.linearRampToValueAtTime(0.18, t + 0.002);
-  g2.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+  g2.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
   osc.connect(g).connect(dest);
   osc2.connect(g2).connect(dest);
-  osc.start(t); osc.stop(t + 0.5);
-  osc2.start(t); osc2.stop(t + 0.22);
+  osc.start(t); osc.stop(t + 0.18);
+  osc2.start(t); osc2.stop(t + 0.14);
 }
 
 /** Pad — detuned saw chord + slow LFO. */

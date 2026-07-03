@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Nebula Studio 2.0 — Beat Maker</title>
+  <title>Nebula Studio 2.9 — Beat Maker</title>
   <meta name="description" content="A production-grade, browser-based beat maker built entirely on the Web Audio API. Zero dependencies. Step sequencer, song mode, MIDI export, WAV export, virtual keyboard, tutorials." />
   <meta name="theme-color" content="#0a0014" />
 
-  <meta property="og:title" content="Nebula Studio 2.0 — Beat Maker" />
+  <meta property="og:title" content="Nebula Studio 2.9 — Beat Maker" />
   <meta property="og:description" content="Production-grade web beat maker · Web Audio API · 0 dependencies" />
   <meta property="og:type" content="website" />
   <meta property="og:image" content="/public/og/og-image-1200x630.jpg" />
@@ -15,7 +15,7 @@
   <meta property="og:image:height" content="630" />
 
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Nebula Studio 2.0 — Beat Maker" />
+  <meta name="twitter:title" content="Nebula Studio 2.9 — Beat Maker" />
   <meta name="twitter:description" content="Production-grade web beat maker · Web Audio API · 0 dependencies" />
   <meta name="twitter:image" content="/public/og/og-image-1200x630.jpg" />
 
@@ -86,6 +86,10 @@
           </div>
         </div>
       </section>
+      <!-- Play Along practice bar — hidden until a Learn-tab exercise is
+           started; lives on the main screen (not a separate tab) so you see
+           the backing beat's squares AND the note-to-press prompt together. -->
+      <div id="playAlongStageHost"></div>
     </section>
 
     <!-- Song tab -->
@@ -106,7 +110,13 @@
     <!-- Learn tab -->
     <section class="tab-panel" data-panel="learn">
       <div class="card" id="learnHost"></div>
-      <div class="card" id="playAlongHost" style="margin-top:16px"></div>
+      <div class="card" id="playAlongHost" style="margin-top:16px">
+        <header class="card__head">
+          <h2>PLAY ALONG</h2>
+          <span class="card__hint">pick one — it opens on the main Pattern screen with a matching beat</span>
+        </header>
+        <div class="pa__picker" id="playAlongPicker"></div>
+      </div>
     </section>
 
     <footer class="foot">
@@ -119,7 +129,7 @@
         <span class="foot__kbd">⌘Z</span> undo
       </div>
       <div class="foot__right">
-        Nebula Studio 2.0 ·
+        Nebula Studio 2.9 ·
         <a href="https://github.com/veter391/nebula-studio" target="_blank" rel="noreferrer">View on GitHub</a>
       </div>
     </footer>
