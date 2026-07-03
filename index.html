@@ -73,13 +73,27 @@
       <div class="viz-wrap">
         <!-- visualizer canvas + its own HUD render into here -->
         <div class="viz-host" id="vizHost"></div>
-        <!-- Play Along cue: the big "press this key now" letter, overlaid on
-             the visualizer so the practice prompt is front-and-centre.
-             Hidden until an exercise is running. -->
-        <div class="viz-cue" id="vizCue" hidden>
-          <span class="viz-cue__key" id="vizCueKey">—</span>
-          <span class="viz-cue__note" id="vizCueNote"></span>
+
+        <!-- Play Along overlay — the scrolling note line + prompt, laid
+             semi-transparently over the visualizer so practice happens
+             right where you're looking. Hidden until an exercise starts. -->
+        <div class="pa-overlay" id="paOverlay" hidden>
+          <div class="pa-overlay__bar">
+            <span class="pa-overlay__title" id="paSongName">—</span>
+            <div class="pa-overlay__modes" role="group" aria-label="Practice mode">
+              <button class="pa-mode is-active" id="paModeTraining" type="button">Training</button>
+              <button class="pa-mode" id="paModePlay" type="button">Play</button>
+            </div>
+            <span class="pa-overlay__status" id="paStatus"></span>
+            <button class="pa-overlay__stop" id="paStop" type="button">Stop</button>
+          </div>
+          <div class="pa-highway" id="paHighway">
+            <div class="pa-playhead"></div>
+            <div class="pa-lane" id="paLane"></div>
+            <div class="pa-countdown" id="paCountdown" hidden></div>
+          </div>
         </div>
+
         <!-- Keyboard-mode toggle, bottom-left corner of the visualizer -->
         <button class="viz-kb-toggle" id="vizKbToggle" type="button" aria-pressed="false"
           title="Enable keyboard mode — play notes with your computer keyboard">
@@ -102,10 +116,6 @@
           </div>
         </div>
       </section>
-      <!-- Play Along practice bar — hidden until a Learn-tab exercise is
-           started; lives on the main screen (not a separate tab) so you see
-           the backing beat's squares AND the note-to-press prompt together. -->
-      <div id="playAlongStageHost"></div>
     </section>
 
     <!-- Song tab -->

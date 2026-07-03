@@ -89,10 +89,7 @@ bootBtn.addEventListener('click', async () => {
   mountTutorials(document.getElementById('learnHost'));
   mountPlayAlong({
     pickerHost: document.getElementById('playAlongPicker'),
-    stageHost: document.getElementById('playAlongStageHost'),
-    cueEl: document.getElementById('vizCue'),
-    cueKeyEl: document.getElementById('vizCueKey'),
-    cueNoteEl: document.getElementById('vizCueNote'),
+    overlayEl: document.getElementById('paOverlay'),
     switchToPatternTab: () => store.setTab('pattern'),
   });
 

@@ -504,37 +504,6 @@ input[type="range"]::-moz-range-thumb {
    so the play-along cue and keyboard toggle can overlay on top of it. */
 .viz-host { position: absolute; inset: 0; }
 
-/* Play Along cue — the big "press this key" letter over the visualizer. */
-.viz-cue {
-  position: absolute;
-  left: 50%;
-  bottom: 16px;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 8px 20px;
-  background: color-mix(in srgb, #000 55%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
-  border-radius: 999px;
-  backdrop-filter: blur(8px);
-  pointer-events: none;
-  z-index: 3;
-}
-.viz-cue__key {
-  font-family: var(--font-mono);
-  font-size: 40px;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--accent);
-  text-shadow: 0 0 18px color-mix(in srgb, var(--accent) 70%, transparent);
-}
-.viz-cue__note {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  color: var(--text-dim);
-}
-
 /* Keyboard-mode toggle — bottom-left corner of the visualizer window. */
 .viz-kb-toggle {
   position: absolute;
@@ -2044,94 +2013,173 @@ input[type="range"]::-moz-range-thumb {
 .pa__song-name { display: block; font-weight: 600; color: var(--text); margin-bottom: 4px; }
 .pa__song-desc { display: block; font-size: 11.5px; color: var(--text-dim); line-height: 1.4; }
 
-.pa__stage {
-  margin-top: 16px;
-  padding: 16px;
-  background: color-mix(in srgb, var(--accent) 5%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
-  border-radius: var(--radius-md);
+/* ---- Play Along overlay (on the visualizer) ---- */
+.pa-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+  padding: 8px 10px 10px;
+  background: linear-gradient(to top, color-mix(in srgb, #000 78%, transparent) 55%, transparent);
+  backdrop-filter: blur(2px);
 }
-.pa__stage-head {
+.pa-overlay__bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding-left: 96px; /* clear the bottom-left KEYS toggle */
 }
-.pa__stage-title {
+.pa-overlay__title {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   color: var(--text);
   text-transform: uppercase;
-}
-
-.pa__highway {
-  position: relative;
-  height: 64px;
+  white-space: nowrap;
   overflow: hidden;
-  background: color-mix(in srgb, var(--text) 3%, transparent);
+  text-overflow: ellipsis;
+  max-width: 30%;
+}
+.pa-overlay__modes {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: color-mix(in srgb, #000 50%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+.pa-mode {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-mute);
+  text-transform: uppercase;
+  transition: color 0.15s, background 0.15s;
+}
+.pa-mode:hover { color: var(--text); }
+.pa-mode.is-active { background: var(--accent); color: #04121a; }
+.pa-overlay__status {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-dim);
+  margin-left: auto;
+  white-space: nowrap;
+}
+.pa-overlay__stop {
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--c-rose) 50%, var(--line));
+  background: color-mix(in srgb, var(--c-rose) 12%, transparent);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--c-rose);
+  text-transform: uppercase;
+}
+.pa-overlay__stop:hover { background: color-mix(in srgb, var(--c-rose) 22%, transparent); }
+
+.pa-highway {
+  position: relative;
+  height: 58px;
+  overflow: hidden;
+  background: color-mix(in srgb, #000 45%, transparent);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  margin-bottom: 12px;
 }
-.pa__playhead {
+.pa-playhead {
   position: absolute;
-  left: 25%;
+  left: 22%;
   top: 0;
   bottom: 0;
   width: 2px;
   background: var(--accent-2);
-  box-shadow: 0 0 10px var(--accent-2);
+  box-shadow: 0 0 12px var(--accent-2);
   z-index: 2;
 }
-.pa__lane {
+.pa-lane {
   position: absolute;
   top: 0;
   left: 0;
   height: 100%;
   will-change: transform;
 }
-.pa__note {
+.pa-note {
   position: absolute;
-  top: 12px;
+  top: 9px;
   height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
   border-radius: var(--radius-sm);
   font-family: var(--font-mono);
   color: var(--text);
+  transition: background 0.12s, border-color 0.12s, transform 0.12s, box-shadow 0.12s;
 }
-.pa__note.is-hit { background: color-mix(in srgb, var(--c-lime) 30%, transparent); border-color: var(--c-lime); }
-.pa__note.is-miss { background: color-mix(in srgb, var(--c-rose) 20%, transparent); border-color: var(--c-rose); opacity: 0.6; }
-/* Letter (which key to press) is the dominant label; note name is small
-   reference info tucked in the corner -- same key-first hierarchy as
-   the on-screen piano keys and the NOW indicator above. */
-.pa__note-letter { font-size: 13px; font-weight: 700; }
-.pa__note-name {
+/* Letter (which key to press) is the dominant label; note name small. */
+.pa-note__letter { font-size: 15px; font-weight: 700; }
+.pa-note__name {
   position: absolute;
   top: 2px;
-  left: 4px;
+  left: 5px;
   font-size: 7px;
   font-weight: 600;
   color: var(--text-dim);
 }
+/* The note the learner must press right now (training mode). */
+.pa-note.is-current {
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+  border-color: var(--accent);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 60%, transparent);
+  transform: scale(1.06);
+  z-index: 1;
+}
+.pa-note.is-hit {
+  background: color-mix(in srgb, var(--c-lime) 32%, transparent);
+  border-color: var(--c-lime);
+}
+.pa-note.is-miss {
+  background: color-mix(in srgb, var(--c-rose) 22%, transparent);
+  border-color: var(--c-rose);
+  opacity: 0.55;
+}
+.pa-note.is-wrong {
+  background: color-mix(in srgb, var(--c-rose) 40%, transparent);
+  border-color: var(--c-rose);
+}
 
-.pa__controls {
+.pa-countdown {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-}
-.pa__score {
+  justify-content: center;
   font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-dim);
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  text-shadow: 0 0 20px color-mix(in srgb, var(--accent) 70%, transparent);
+  background: color-mix(in srgb, #000 35%, transparent);
+  z-index: 3;
+  animation: paCountPulse 0.65s ease-out;
+}
+@keyframes paCountPulse {
+  from { transform: scale(1.5); opacity: 0; }
+  40%  { opacity: 1; }
+  to   { transform: scale(1); opacity: 0.9; }
 }
 
 @media (max-width: 800px) {
-  .viz-cue__key { font-size: 30px; }
-  .pa__highway { height: 56px; }
+  .pa-overlay__bar { padding-left: 0; flex-wrap: wrap; }
+  .pa-overlay__title { max-width: 100%; }
+  .pa-countdown { font-size: 24px; }
 }
