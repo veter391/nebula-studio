@@ -1,8 +1,10 @@
 node_modules
 .git
+.github
 test
 .wrangler
 wrangler.toml
+worker.js
 package.json
 package-lock.json
 .eslintrc.json
