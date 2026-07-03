@@ -83,7 +83,7 @@ describe('chatText — byok mode (key stored)', () => {
   // behavior: real usage shouldn't re-fetch /models on every generate click.
   beforeEach(() => {
     localStorage.setItem(
-      'nebula:free_model_catalog_v3',
+      'nebula:free_model_catalog_v4',
       JSON.stringify({ models: ['test/model-a:free', 'test/model-b:free'], fetchedAt: Date.now() })
     );
   });
@@ -169,7 +169,7 @@ describe('getFreeModelChain — dynamic catalog with layered fallback', () => {
 
   it('falls back to a stale cached catalog if the live fetch fails', async () => {
     localStorage.setItem(
-      'nebula:free_model_catalog_v3',
+      'nebula:free_model_catalog_v4',
       JSON.stringify({ models: ['stale/model:free'], fetchedAt: Date.now() - 999999999 }) // expired TTL
     );
     fetch.mockRejectedValue(new Error('network down'));

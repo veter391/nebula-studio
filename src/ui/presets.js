@@ -42,7 +42,7 @@ export function mountPresets(host) {
           ${getMode() === 'byok' ? 'MY KEY' : 'SHARED · FREE'}
         </button>
       </div>
-      <p class="ai-assistant__hint">Describe a vibe — a real model picks the genre and seed, the deterministic engine builds the beat. Works out of the box (shared, fair-use limited); add your own key in settings for higher limits and privacy.</p>
+      <p class="ai-assistant__hint">Describe a vibe — a real model composes the whole 16-step pattern (which steps hit on each track), tempo and groove; the engine just plays it. Works out of the box (shared, fair-use limited); add your own key in settings for higher limits and privacy.</p>
       <div class="ai-assistant__row">
         <input type="text" id="aiAssistantPrompt" placeholder="e.g. dark warehouse rave at 3am…" maxlength="200" />
         <button id="aiAssistantGo" class="ai-btn">GENERATE</button>

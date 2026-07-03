@@ -7,12 +7,31 @@ sounds unglamorous, that's on purpose.
 
 ## Where the LLM is, and isn't
 
-Nebula's audio engine (sequencer, synth voices, FX, WAV/MIDI export) is 100%
-deterministic procedural code. No model ever touches audio generation. The
-only LLM integration is the **AI Assistant** (`src/ai-assistant.js`): the
-operator describes a vibe in natural language, a model call maps that
-description onto the app's fixed genre vocabulary, and the existing
-deterministic generator (`src/ai.js`) does the actual work.
+The **AI Assistant** (`src/ai-assistant.js`) is a real generative feature:
+from the user's description, the model **composes the actual 16-step
+pattern** — it decides, for each track (kick, snare, hat, bass, lead, …),
+which of the 16 steps are hit, plus the tempo and swing. It is not picking
+a genre or a preset; it authors the step grid. Two live examples (same
+build, different prompts) show it genuinely composing, not templating:
+
+```
+"sparse minimal deep techno, lots of space"   "busy energetic dnb breakbeat"
+  kick   X...X...X...X...                        kick   X.X.X...X.X.X.X.
+  snare  ........X.......                        snare  ....X.......X...
+  hat    ..X...X...X...X.                        hat    .X.X.X.X.X.X.X.X
+                                                 tom    ......X.......X.
+```
+
+The honest boundary: the LLM **can't emit audio**, only decide which steps
+trigger. So the deterministic engine (`src/ai.js` voices, FX, scheduler)
+still *synthesises* the sound from the grid the model composed. That's the
+real split — the model composes the rhythm, the engine renders it. If the
+model is unavailable or returns nothing usable, it falls back to the
+deterministic procedural generator so the button always does something.
+
+(Earlier versions of this feature only had the model pick a genre label and
+let the deterministic engine roll a template — which was fair to call
+"decorative AI." It now composes the pattern itself.)
 
 The **Play Along** practice mode (`src/ui/play-along.js`, `src/data/songs.js`)
 is explicitly *not* AI — it's a hand-authored note timeline plus real-time
@@ -27,19 +46,24 @@ one right answer.)
 
 ## Tool-contract pattern (structured output + validation)
 
-The model is never trusted to control app behavior directly. It returns
-JSON, and every field is validated against a closed contract before it can
-touch anything:
+The model composes the pattern, but its output is never trusted
+*structurally*. It returns JSON, and everything is sanitized against a
+closed contract before it can reach the engine — the musical *content* is
+the model's, the *shape* is enforced:
 
-- `genre` must be one of the app's real genre strings (`AI.genres`). A
-  hallucinated or malformed genre falls back to a real genre (`house`), never
-  to an internal-only sentinel value that could leak into the UI.
-- `seedHint` is clamped to `[1, 999999]` regardless of what the model
-  returns (a model has been observed returning out-of-range and even
-  non-numeric values here in testing).
-- If the JSON doesn't parse, or required fields are missing, the whole
-  response is rejected — `chatJSON()` returns `{ok: false}` rather than a
-  best-effort guess.
+- The composed `pattern` is coerced to exactly the 12 known tracks × 16
+  steps, each value forced to 0/1. Rows the model made too short are padded,
+  too long are truncated, junk values (`"x"`, `null`, `0.9`, `{}`) become
+  0/1. Track ids the model invents (`cowbell`) are dropped. If the model
+  supplies no actual hits, the whole thing falls back to the deterministic
+  generator.
+- `genre` (used for the label + tempo default) must be one of the app's real
+  genre strings; a hallucinated one falls back to a real genre, never the
+  internal-only sentinel.
+- `bpm` and `swing` are clamped to safe ranges (`[60,200]`, `[0,0.6]`).
+- If the JSON doesn't parse (e.g. a truncated grid), the response is
+  rejected — `chatJSON()` returns `{ok: false}` rather than a best-effort
+  guess, and the shared proxy walks to the next model.
 
 Both the direct (BYOK) and proxied (shared) request paths now also request
 native JSON mode from OpenRouter (`response_format: {type: "json_object"}`),

@@ -1,24 +1,74 @@
 /**
- * AI Assistant — translates a natural-language vibe description into
- * parameters for the existing deterministic pattern generator (ai.js).
+ * AI Assistant — the model actually COMPOSES the beat.
  *
- * This module never generates audio, note data, or pattern steps itself —
- * it only picks {genre, seed, bpmFeel} from real user intent and hands off
- * to `generatePattern()`, which is 100% deterministic procedural code. That
- * keeps the honest split this project is built on: the LLM interprets
- * *intent*, the audio engine is always deterministic and inspectable.
+ * From the user's description the model writes the pattern itself: for each
+ * drum/instrument track it decides which of the 16 steps are hit, plus the
+ * tempo and swing. It is not picking a preset or a genre template — it
+ * authors the step grid. We validate only the *structure* (exactly 16
+ * steps per track, coerced to 0/1, unknown tracks dropped) so malformed
+ * output can't reach the engine, but the musical *content* is the model's.
+ *
+ * The deterministic engine still SYNTHESISES the audio — an LLM can't emit
+ * sound, only decide which steps trigger. That's the honest split: the
+ * model composes the rhythm, the engine renders it. If the model is
+ * unavailable or returns nothing usable, we fall back to the deterministic
+ * procedural generator so the button always does something.
  *
  * @module ai-assistant
  */
 
 import { chatJSON } from './core/openrouter-client.js';
 import { AI } from './ai.js';
+import { TRACK_IDS } from './data/tracks.js';
 
-const SYSTEM_PROMPT = `You are the AI Assistant inside Nebula Studio, a browser beat maker. The user describes a vibe, mood, or scene in their own words. Your only job is to map that description onto the app's existing genre engine — you never generate audio yourself. Available genres: ${AI.genres.join(', ')}. Respond with ONLY a JSON object: {"genre": one of the exact genre strings above, "reasoning": string (1 sentence, why this genre fits), "seedHint": integer between 1 and 999999 (pick something that feels intentional for the mood, e.g. a moodier vibe might get a different seed than an energetic one — this only affects which random variation is rolled, not the genre)}.`;
+const STEPS = 16;
+
+const SYSTEM_PROMPT = `You are the beat-composer inside Nebula Studio, a 16-step drum machine. From the user's vibe you COMPOSE an original pattern — you decide which steps play, you are not choosing a preset.
+
+The grid is 16 steps = one bar of 4/4. Steps 1,5,9,13 are the strong beats (downbeats); 3,7,11,15 are the backbeats; the rest are offbeats/syncopation.
+
+Tracks you can use (include only the ones you want playing):
+- kick: the pulse. snare/clap: backbeat, usually steps 5 & 13. hat: keeps time (offbeats/16ths). tom, rim: fills & accents. sub, bass: low end / groove. lead, pluck: melodic hooks. pad: sustained atmosphere. fx: risers/impacts.
+
+Compose something that genuinely fits the description — sparse and spacious vs dense and driving, straight vs swung, where the accents land. Vary it; don't just do four-on-the-floor every time unless it fits.
+
+Available genres (pick the closest label): ${AI.genres.join(', ')}.
+
+Respond with ONLY a JSON object:
+{
+  "genre": one of the exact genre labels above,
+  "bpm": integer tempo matching the vibe (chill ~70-95, mid ~100-120, upbeat ~120-135, fast ~140-175),
+  "swing": number 0.0-0.5 (0 = straight, ~0.15-0.25 = human groove),
+  "pattern": { "kick":[16 x 0 or 1], "snare":[...], "hat":[...], ...only the tracks you use... },
+  "reasoning": ONE short sentence on the groove you built and why it fits
+}
+Every array you include MUST have exactly 16 numbers, each 0 or 1.`;
+
+const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
+
+/**
+ * Coerce whatever the model returned into a valid 12-track x 16-step grid of
+ * 0/1. Unknown tracks are ignored, arrays are padded/truncated to 16, values
+ * forced to 0/1. Returns null if the model supplied no actual hits (so the
+ * caller can fall back to the deterministic generator).
+ */
+function sanitizePattern(aiPattern) {
+  if (!aiPattern || typeof aiPattern !== 'object') return null;
+  const out = {};
+  let anyHit = false;
+  for (const id of TRACK_IDS) {
+    const row = Array.isArray(aiPattern[id]) ? aiPattern[id] : [];
+    const steps = new Array(STEPS);
+    for (let i = 0; i < STEPS; i++) steps[i] = row[i] ? 1 : 0;
+    if (steps.some(Boolean)) anyHit = true;
+    out[id] = steps;
+  }
+  return anyHit ? out : null;
+}
 
 /**
  * @param {string} promptText - user's natural-language vibe description
- * @returns {Promise<{ok: true, genre: string, reasoning: string, pattern: object, bpm: number, swing: number, model: string} | {ok: false, error: string, isConfigError: boolean}>}
+ * @returns {Promise<{ok: true, genre: string, reasoning: string, pattern: object, bpm: number, swing: number, model: string, composedByAI: boolean} | {ok: false, error: string, isConfigError?: boolean, isRateLimited?: boolean}>}
  */
 export async function suggestFromPrompt(promptText) {
   if (!promptText || !promptText.trim()) {
@@ -31,26 +81,33 @@ export async function suggestFromPrompt(promptText) {
   ]);
   if (!result.ok) return result;
 
-  const { genre, reasoning, seedHint } = result.parsed || {};
-  // Fall back to a real genre (not the internal-only 'default' sentinel used
-  // by generatePattern) so the UI never has to display "default" to a user.
+  const { genre, bpm, swing, pattern, reasoning } = result.parsed || {};
+
   const FALLBACK_GENRE = 'house';
   const validGenre = AI.genres.includes(genre) ? genre : FALLBACK_GENRE;
-  const rawSeed = Number.isFinite(seedHint) ? Math.floor(seedHint) : Date.now() % 1000000;
-  const seed = Math.min(999999, Math.max(1, rawSeed));
 
-  // The LLM picked *which* deterministic preset to roll and with what seed —
-  // the actual pattern/bpm/swing come entirely from the existing procedural
-  // engine, never from the model.
-  const generated = AI.generatePattern(validGenre, seed);
+  // The model's own composition, structurally validated.
+  const aiPattern = sanitizePattern(pattern);
+  const composedByAI = aiPattern !== null;
+
+  // If the model gave no usable pattern, fall back to the deterministic
+  // generator so the button still produces a beat.
+  const finalPattern = aiPattern || AI.generatePattern(validGenre, Date.now() % 1000000).pattern;
+
+  // Tempo/swing: the model's choice, clamped to safe ranges; sensible
+  // genre-based defaults if it omitted them.
+  const genreDefaults = AI.generatePattern(validGenre, 1);
+  const finalBpm = Number.isFinite(bpm) ? Math.round(clamp(bpm, 60, 200)) : genreDefaults.bpm;
+  const finalSwing = Number.isFinite(swing) ? clamp(swing, 0, 0.6) : genreDefaults.swing;
 
   return {
     ok: true,
     genre: validGenre,
-    reasoning: reasoning || `Mapped to ${AI.genreLabels[validGenre] || validGenre}.`,
-    pattern: generated.pattern,
-    bpm: generated.bpm,
-    swing: generated.swing,
+    reasoning: reasoning || (composedByAI ? 'Composed a custom groove.' : `Rolled a ${AI.genreLabels[validGenre] || validGenre} beat.`),
+    pattern: finalPattern,
+    bpm: finalBpm,
+    swing: finalSwing,
     model: result.model,
+    composedByAI,
   };
 }

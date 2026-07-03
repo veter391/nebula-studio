@@ -23,16 +23,18 @@
  * @module worker
  */
 
-// Known fast, reliable, general instruct models tried FIRST (in this order)
-// when they're still free. The assistant only maps a vibe to a genre -- a
-// mid-size instruct model does that in ~2-4s and just as correctly as a
-// 400B+ reasoning model that takes 20-30s. Ranking purely by size (below)
-// would put the slowest giants in front of every request; this curated
-// front keeps the common path fast. Any that lose free status are skipped
-// and the size-ranked tail (from the live catalog) covers the rest.
-const PREFERRED_FAST = [
+// Capable GENERAL instruct models tried FIRST (in this order) when still
+// free. Ordered by capability-per-latency for the assistant's job (map a
+// vibe to genre + tempo + groove + energy): large general models lead for
+// quality, smaller ones follow as fast fallbacks. Deliberately NOT ordered
+// purely by raw size -- the very biggest free models are either narrow
+// coding models or reasoning models that take 20-30s without producing a
+// better answer for this task. Any that lose free status are skipped and
+// the ranked tail (from the live catalog) covers the rest.
+const PREFERRED_MODELS = [
   'meta-llama/llama-3.3-70b-instruct:free',
   'qwen/qwen3-next-80b-a3b-instruct:free',
+  'openai/gpt-oss-120b:free',
   'openai/gpt-oss-20b:free',
   'google/gemma-4-31b-it:free',
   'nvidia/nemotron-nano-9b-v2:free',
@@ -47,18 +49,19 @@ const HARDCODED_FALLBACK = ['meta-llama/llama-3.3-70b-instruct:free', 'nvidia/ne
 const CATALOG_CACHE_TTL_SECONDS = 3600; // 1h -- free-tier catalog doesn't change minute to minute
 // Cache key only (never fetched). Bump the suffix whenever the ranking
 // logic changes so a stale cached ordering doesn't linger for up to an hour.
-const CATALOG_CACHE_URL = 'https://nebula-studio.internal/free-model-catalog-v3-fast-first';
+const CATALOG_CACHE_URL = 'https://nebula-studio.internal/free-model-catalog-v4-capable-first';
 
 // Cloudflare's native rate-limit binding only supports 10s/60s windows
 // (burst protection), not a real "N per hour" quota -- see wrangler.toml.
 const RATE_LIMIT_WINDOW_LABEL = '6 requests per 60s per visitor';
-// Per-model timeout: a working free model answers in ~2-6s, so one still
-// silent at 10s is stuck (upstream queue) -- abandon it and try the next.
-const REQUEST_TIMEOUT_MS = 10000;
+// Per-model timeout: generous enough to let a capable model finish (quality
+// is worth a wait), but not so long that a stuck/queued one drags on. A good
+// answer in 15s beats a fast weak one.
+const REQUEST_TIMEOUT_MS = 16000;
 // Overall wall-clock cap across ALL model attempts. Past this, give up and
 // let the client fall back to an instant deterministic roll instead of
 // stacking timeout after timeout (which is how a request hit 58s before).
-const OVERALL_BUDGET_MS = 22000;
+const OVERALL_BUDGET_MS = 32000;
 
 export default {
   async fetch(request, env, ctx) {
@@ -140,16 +143,20 @@ function rankFreeModels(models) {
     .filter((m) => m.architecture?.modality === 'text->text' || m.architecture?.input_modalities?.includes('text'))
     .map((m) => ({
       id: m.id,
+      // Narrow coding models and always-on reasoning models go to the back:
+      // neither improves genre/tempo/energy picking, and reasoning models are
+      // slow. General models by size come first.
+      coding: /code|coder/i.test(m.id) ? 1 : 0,
       reasoning: m.reasoning?.default_enabled ? 1 : 0,
       size: parseParamCount(m.name, m.description),
       ctx: m.context_length || 0,
     }))
-    .sort((a, b) => a.reasoning - b.reasoning || b.size - a.size || b.ctx - a.ctx)
+    .sort((a, b) => a.coding - b.coding || a.reasoning - b.reasoning || b.size - a.size || b.ctx - a.ctx)
     .map((m) => m.id);
 
-  // Curated fast models first (if still free), then the size-ranked tail.
+  // Curated capable models first (if still free), then the ranked tail.
   const available = new Set(ranked);
-  const front = PREFERRED_FAST.filter((id) => available.has(id));
+  const front = PREFERRED_MODELS.filter((id) => available.has(id));
   const frontSet = new Set(front);
   return [...front, ...ranked.filter((id) => !frontSet.has(id))];
 }
@@ -231,14 +238,13 @@ async function handleAIProxy(request, env, ctx) {
           model,
           messages,
           temperature: body.temperature ?? 0.6,
-          // Comfortable budget so reasoning models (some can't disable it --
-          // gpt-oss returns 400 if you try) don't truncate the JSON: their
-          // thinking tokens + the object both fit. Do NOT send
-          // reasoning:{enabled:false} -- it 400s on reasoning-mandatory
-          // endpoints and knocks otherwise-fast models (gpt-oss ~1.8s) out
-          // of the pool, leaving only the slow ones. Truncation is instead
-          // prevented by this budget + the JSON validation below.
-          max_tokens: Math.min(body.maxTokens ?? 700, 900),
+          // Large budget: the assistant now returns a full 16-step pattern
+          // (up to 12 tracks x 16 numbers) plus a reasoning model's thinking
+          // tokens, all of which count here -- too small truncates the JSON
+          // mid-grid. Do NOT send reasoning:{enabled:false} -- it 400s on
+          // reasoning-mandatory endpoints (gpt-oss) and knocks fast models
+          // out of the pool. Truncation is caught by the JSON check below.
+          max_tokens: Math.min(body.maxTokens ?? 1600, 2000),
           response_format: { type: 'json_object' },
         }),
         signal: controller.signal,

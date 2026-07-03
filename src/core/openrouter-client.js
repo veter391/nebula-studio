@@ -24,7 +24,7 @@ const MODELS_URL = 'https://openrouter.ai/api/v1/models';
 const PROXY_URL = '/api/ai';
 const STORAGE_KEY = 'nebula:openrouter_key';
 const STORAGE_MODEL_KEY = 'nebula:openrouter_model';
-const CATALOG_CACHE_KEY = 'nebula:free_model_catalog_v3'; // bump when ranking changes to drop stale ordering
+const CATALOG_CACHE_KEY = 'nebula:free_model_catalog_v4'; // bump when ranking changes to drop stale ordering
 const CATALOG_CACHE_TTL_MS = 60 * 60 * 1000; // 1h
 const REQUEST_TIMEOUT_MS = 25000;
 
@@ -38,11 +38,12 @@ const REQUEST_TIMEOUT_MS = 25000;
  * reasonable list to show before the live catalog has loaded.
  */
 export const FREE_MODEL_CHAIN = [
-  // Fast instruct models first (see rankFreeModels) — big reasoning models
-  // are correct but slow (8-20s) for this trivial task, kept lower as a net.
+  // Capable general instruct models first (see rankFreeModels); slower giant
+  // reasoning models kept lower as a safety net, tiny ones last.
   'meta-llama/llama-3.3-70b-instruct:free',
   'qwen/qwen3-next-80b-a3b-instruct:free',
   'openai/gpt-oss-120b:free',
+  'openai/gpt-oss-20b:free',
   'nvidia/nemotron-nano-9b-v2:free',
   'nousresearch/hermes-3-llama-3.1-405b:free',
   'nvidia/nemotron-3-super-120b-a12b:free',
@@ -99,13 +100,13 @@ export async function getFreeModelChain() {
   return FREE_MODEL_CHAIN;
 }
 
-// Curated fast instruct models first, then a size-ranked tail (reasoning
-// models deprioritized) — a mid-size instruct model maps a vibe to a genre
-// in ~2-4s, where a 400B+ reasoning model takes 20-30s. Same rationale and
-// list as worker.js.
-const PREFERRED_FAST = [
+// Capable general instruct models first, then a ranked tail (coding + always-
+// on reasoning models deprioritized — neither improves the task and reasoning
+// ones are slow). Same rationale and list as worker.js.
+const PREFERRED_MODELS = [
   'meta-llama/llama-3.3-70b-instruct:free',
   'qwen/qwen3-next-80b-a3b-instruct:free',
+  'openai/gpt-oss-120b:free',
   'openai/gpt-oss-20b:free',
   'google/gemma-4-31b-it:free',
   'nvidia/nemotron-nano-9b-v2:free',
@@ -116,14 +117,15 @@ function rankFreeModels(models) {
     .filter((m) => m.architecture?.modality === 'text->text' || m.architecture?.input_modalities?.includes('text'))
     .map((m) => ({
       id: m.id,
+      coding: /code|coder/i.test(m.id) ? 1 : 0,
       reasoning: m.reasoning?.default_enabled ? 1 : 0,
       size: parseParamCount(m.name, m.description),
       ctx: m.context_length || 0,
     }))
-    .sort((a, b) => a.reasoning - b.reasoning || b.size - a.size || b.ctx - a.ctx)
+    .sort((a, b) => a.coding - b.coding || a.reasoning - b.reasoning || b.size - a.size || b.ctx - a.ctx)
     .map((m) => m.id);
   const available = new Set(ranked);
-  const front = PREFERRED_FAST.filter((id) => available.has(id));
+  const front = PREFERRED_MODELS.filter((id) => available.has(id));
   const frontSet = new Set(front);
   return [...front, ...ranked.filter((id) => !frontSet.has(id))];
 }
@@ -193,10 +195,9 @@ async function callDirect(model, messages, { apiKey, signal, temperature, maxTok
       model,
       messages,
       temperature: temperature ?? 0.6,
-      // Comfortable budget for reasoning models' thinking + the JSON. Do NOT
-      // send reasoning:{enabled:false} — it 400s on reasoning-mandatory
-      // endpoints. See the same note in worker.js.
-      max_tokens: maxTokens ?? 700,
+      // Large budget: the assistant returns a full 16-step pattern plus a
+      // reasoning model's thinking tokens. See the note in worker.js.
+      max_tokens: maxTokens ?? 1600,
       response_format: { type: 'json_object' },
     }),
     signal,
