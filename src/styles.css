@@ -1803,4 +1803,9 @@ input[type="range"]::-moz-range-thumb {
 @media (max-width: 500px) {
   .mixer__grid { grid-template-columns: 1fr 1fr; }
   .seq__row { grid-template-columns: 130px 1fr; gap: 8px; }
+  /* Touch targets: the 130px label column can't fit full 44px WCAG-ideal
+     buttons for 3 controls, but 20px is too small to reliably tap — this
+     is the practical middle ground for this layout. */
+  .seq__ctrl { opacity: 1; gap: 6px; }
+  .seq__mini-btn { width: 26px; height: 26px; }
 }

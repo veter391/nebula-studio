@@ -155,8 +155,24 @@ function wireAIAssistant(host) {
     goBtn.textContent = 'GENERATE';
 
     if (!result.ok) {
+      if (result.isConfigError) {
+        // A bad/rejected key needs the operator's attention — auto-rolling
+        // here would hide the real problem, so surface it plainly instead.
+        status.className = 'ai-assistant__status ai-assistant__status--warn';
+        status.textContent = `OpenRouter rejected the request (${result.error}) — check your key via the ✨ button.`;
+        return;
+      }
+      // Transient failure (rate limit, timeout, malformed response from a
+      // free model) — the assistant must never leave the app stuck. Fall
+      // back to the same deterministic roll the 🎲 button uses, clearly
+      // labeled as a fallback rather than pretending the AI call succeeded.
+      const genre = sel.value;
+      const seed = Date.now() + Math.floor(Math.random() * 1e9);
+      const gen = AI.generatePattern(genre, seed);
+      store.set({ pattern: gen.pattern, bpm: gen.bpm, swing: gen.swing });
       status.className = 'ai-assistant__status ai-assistant__status--warn';
-      status.textContent = `AI unavailable (${result.error}) — try again or use 🎲 ROLL instead.`;
+      status.textContent = `AI unavailable (${result.error}) — rolled a ${AI.genreLabels[genre]} pattern instead.`;
+      showToast(`AI unavailable — rolled a ${AI.genreLabels[genre]} pattern instead`);
       return;
     }
 

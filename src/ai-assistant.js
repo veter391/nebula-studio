@@ -35,8 +35,12 @@ export async function suggestFromPrompt(promptText) {
   if (!result.ok) return result;
 
   const { genre, reasoning, seedHint } = result.parsed || {};
-  const validGenre = AI.genres.includes(genre) ? genre : 'default';
-  const seed = Number.isFinite(seedHint) ? Math.floor(seedHint) : Date.now() % 1000000;
+  // Fall back to a real genre (not the internal-only 'default' sentinel used
+  // by generatePattern) so the UI never has to display "default" to a user.
+  const FALLBACK_GENRE = 'house';
+  const validGenre = AI.genres.includes(genre) ? genre : FALLBACK_GENRE;
+  const rawSeed = Number.isFinite(seedHint) ? Math.floor(seedHint) : Date.now() % 1000000;
+  const seed = Math.min(999999, Math.max(1, rawSeed));
 
   // The LLM picked *which* deterministic preset to roll and with what seed —
   // the actual pattern/bpm/swing come entirely from the existing procedural

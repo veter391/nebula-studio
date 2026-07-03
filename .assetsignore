@@ -1,0 +1,16 @@
+node_modules
+.git
+test
+.wrangler
+wrangler.toml
+package.json
+package-lock.json
+.eslintrc.json
+eslint.config.js
+.prettierrc
+vitest.config.js
+.gitignore
+.assetsignore
+CONTRIBUTING.md
+CHANGELOG.md
+AI-NOTES.md

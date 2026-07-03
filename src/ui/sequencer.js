@@ -35,8 +35,8 @@ export function mountSequencer(host) {
         <span class="seq__name">${tr.name}</span>
         <span class="seq__num">${ti + 1}</span>
         <div class="seq__ctrl">
-          <button class="seq__mini-btn" data-act="mute" title="Mute">M</button>
-          <button class="seq__mini-btn" data-act="solo" title="Solo">S</button>
+          <button class="seq__mini-btn" data-act="mute" title="Mute" aria-pressed="false">M</button>
+          <button class="seq__mini-btn" data-act="solo" title="Solo" aria-pressed="false">S</button>
           <button class="seq__mini-btn" data-act="preview" title="Preview">▶</button>
         </div>
       </div>
@@ -70,17 +70,29 @@ export function mountSequencer(host) {
       steps.appendChild(cell);
     }
 
-    row.querySelector('[data-act="mute"]').addEventListener('click', (e) => {
+    // Reflect whatever mute/solo state this track already has (e.g. loaded
+    // from a preset/save slot) instead of always starting visually "off".
+    const initial = store.get().tracks.find((x) => x.id === tr.id);
+    const muteBtn = row.querySelector('[data-act="mute"]');
+    const soloBtn = row.querySelector('[data-act="solo"]');
+    muteBtn.classList.toggle('is-mute', Boolean(initial?.mute));
+    muteBtn.setAttribute('aria-pressed', String(Boolean(initial?.mute)));
+    soloBtn.classList.toggle('is-solo', Boolean(initial?.solo));
+    soloBtn.setAttribute('aria-pressed', String(Boolean(initial?.solo)));
+
+    muteBtn.addEventListener('click', (e) => {
       const t = store.get().tracks.find((x) => x.id === tr.id);
       store.setTrack(tr.id, { mute: !t.mute });
       engine.applyState(store.get());
       e.currentTarget.classList.toggle('is-mute', !t.mute);
+      e.currentTarget.setAttribute('aria-pressed', String(!t.mute));
     });
-    row.querySelector('[data-act="solo"]').addEventListener('click', (e) => {
+    soloBtn.addEventListener('click', (e) => {
       const t = store.get().tracks.find((x) => x.id === tr.id);
       store.setTrack(tr.id, { solo: !t.solo });
       engine.applyState(store.get());
       e.currentTarget.classList.toggle('is-solo', !t.solo);
+      e.currentTarget.setAttribute('aria-pressed', String(!t.solo));
     });
     row.querySelector('[data-act="preview"]').addEventListener('click', () => engine.trigger(tr.id));
 

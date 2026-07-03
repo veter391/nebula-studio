@@ -28,3 +28,6 @@ coverage/
 
 # Local-only files
 *.local
+
+# Cloudflare Workers local state
+.wrangler/
