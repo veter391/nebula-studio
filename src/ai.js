@@ -10,8 +10,7 @@
  * @module ai
  */
 
-import { TRACK_IDS, TRACKS } from './data/tracks.js';
-import { CHORD_TYPES, PROGRESSIONS, midiToFreq, midiToName } from './utils.js';
+import { CHORD_TYPES, PROGRESSIONS } from './utils.js';
 
 /** Tiny seeded RNG (mulberry32). */
 function rng(seed) {

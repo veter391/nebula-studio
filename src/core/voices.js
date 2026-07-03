@@ -73,7 +73,7 @@ export function kick(ctx, dest, t, opts = {}) {
 }
 
 /** Snare — noise body + warm tonal body with envelope-shaped filter. */
-export function snare(ctx, dest, t, opts = {}) {
+export function snare(ctx, dest, t, _opts = {}) {
   // Noise body with envelope-shaped lowpass for crispness without fizz
   const noise = ctx.createBufferSource();
   noise.buffer = ctx.noiseBuffer;

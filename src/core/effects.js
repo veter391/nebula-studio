@@ -7,7 +7,7 @@
  * @module core/effects
  */
 
-import { makeSatCurve, makeNoiseBuffer } from './voices.js';
+import { makeSatCurve } from './voices.js';
 
 /** Three-band EQ (low shelf @ 250Hz, peaking mid @ 1kHz, high shelf @ 4kHz). */
 export function makeEQ(ctx) {
@@ -170,7 +170,7 @@ export function makeReverbImpulse(ctx, duration = 2.4, decay = 2.0) {
 }
 
 /** Master chain: reverb (parallel) + delay (parallel) + master filter + compressor + gain. */
-export function makeMasterBus(ctx, opts = {}) {
+export function makeMasterBus(ctx, _opts = {}) {
   // master filter
   const filter = ctx.createBiquadFilter();
   filter.type = 'lowpass';

@@ -8,7 +8,7 @@
 import { store } from '../store.js';
 import { engine } from '../core/engine.js';
 import { TRACKS } from '../data/tracks.js';
-import { resolveVar, clamp } from '../utils.js';
+import { resolveVar } from '../utils.js';
 
 export function mountMixer(host) {
   host.innerHTML = `

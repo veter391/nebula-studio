@@ -140,14 +140,14 @@ export function mountSong(host) {
       const el = host.querySelector(`#count-${s}`);
       if (el) el.textContent = `${hits} hit${hits === 1 ? '' : 's'}`;
       const preview = host.querySelector(`#preview-${s}`);
-      if (preview) previewRender(preview, pattern, s);
+      if (preview) previewRender(preview, pattern);
     });
     chipsEl.innerHTML = store.get().songChain
       .map((s, i) => `<button class="chain__chip" data-chip-idx="${i}">${s}</button>`)
       .join('');
   }
 
-  function previewRender(host, pattern, slot) {
+  function previewRender(host, pattern) {
     host.innerHTML = '';
     if (!pattern) return;
     Object.values(pattern).forEach((row) => {

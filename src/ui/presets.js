@@ -7,9 +7,8 @@
 
 import { store } from '../store.js';
 import { showToast } from './shell.js';
-import { PRESETS, PRESETS_BY_GENRE } from '../data/presets.js';
+import { PRESETS_BY_GENRE } from '../data/presets.js';
 import { AI } from '../ai.js';
-import { resolveVar } from '../utils.js';
 import { suggestFromPrompt } from '../ai-assistant.js';
 import {
   getStoredKey,
@@ -17,6 +16,7 @@ import {
   getPreferredModel,
   setPreferredModel,
   getMode,
+  getFreeModelChain,
   FREE_MODEL_CHAIN,
 } from '../core/openrouter-client.js';
 
@@ -127,6 +127,15 @@ const MODEL_LABELS = {
   'liquid/lfm-2.5-1.2b-instruct:free': 'LFM 2.5 1.2B (fastest fallback)',
 };
 
+function renderModelOptions(models, selected) {
+  return (
+    `<option value="">Auto (biggest available first)</option>` +
+    models
+      .map((m) => `<option value="${m}" ${m === selected ? 'selected' : ''}>${MODEL_LABELS[m] || m}</option>`)
+      .join('')
+  );
+}
+
 function openAISettingsModal(keyBtn) {
   const existing = document.getElementById('ai-settings-modal');
   if (existing) existing.remove();
@@ -162,13 +171,13 @@ function openAISettingsModal(keyBtn) {
       <input type="password" id="aiKeyInput" placeholder="sk-or-v1-…" autocomplete="off"
         value="${currentKey ? '••••••••••••••••••••••••' : ''}"
         style="width:100%; box-sizing:border-box; padding:9px 12px; margin-bottom:12px; background:color-mix(in srgb, var(--text) 4%, transparent); border:1px solid var(--line); border-radius:var(--radius-sm); color:var(--text); font-family:var(--font-mono); font-size:12px;" />
-      <label style="display:block; font-size:11px; color:var(--text-mute); margin-bottom:4px;">Preferred model (only used with your own key)</label>
+      <label style="display:block; font-size:11px; color:var(--text-mute); margin-bottom:4px;">
+        Preferred model (only used with your own key)
+        <span id="aiModelListStatus" style="color:var(--text-mute); font-weight:400;"></span>
+      </label>
       <select id="aiModelSelect"
         style="width:100%; box-sizing:border-box; padding:9px 12px; margin-bottom:16px; background:color-mix(in srgb, var(--text) 4%, transparent); border:1px solid var(--line); border-radius:var(--radius-sm); color:var(--text); font-family:var(--font-mono); font-size:12px;">
-        <option value="">Auto (biggest available first)</option>
-        ${FREE_MODEL_CHAIN.map(
-          (m) => `<option value="${m}" ${m === currentModel ? 'selected' : ''}>${MODEL_LABELS[m] || m}</option>`
-        ).join('')}
+        ${renderModelOptions(FREE_MODEL_CHAIN, currentModel)}
       </select>
       <div style="display:flex; gap:8px; justify-content:flex-end;">
         <button id="aiKeyClear" class="ai-btn" style="background:color-mix(in srgb, var(--text) 8%, transparent);">Use shared</button>
@@ -177,6 +186,24 @@ function openAISettingsModal(keyBtn) {
     </div>
   `;
   document.body.appendChild(modal);
+
+  // The select above renders instantly with the hardcoded fallback list so
+  // the modal never looks empty/broken while loading — then swaps in the
+  // live-ranked catalog once it resolves (same source of truth the "Auto"
+  // path actually uses), preserving whatever the operator already picked.
+  const statusEl = modal.querySelector('#aiModelListStatus');
+  const selectEl = modal.querySelector('#aiModelSelect');
+  statusEl.textContent = '· loading live list…';
+  getFreeModelChain()
+    .then((models) => {
+      if (!modal.isConnected) return; // modal was closed before this resolved
+      const picked = selectEl.value;
+      selectEl.innerHTML = renderModelOptions(models, picked);
+      statusEl.textContent = '';
+    })
+    .catch(() => {
+      if (modal.isConnected) statusEl.textContent = '· using default list';
+    });
 
   const close = () => modal.remove();
   modal.querySelector('#aiModalClose').onclick = close;
@@ -294,7 +321,7 @@ function renderSlots(host) {
   addBtn.addEventListener('click', () => {
     const name = prompt('Name your save:', `My beat ${ids.length + 1}`);
     if (!name) return;
-    const id = store.saveToNamedSlot(name);
+    store.saveToNamedSlot(name);
     showToast(`Saved "${name}"`);
   });
   host.appendChild(addBtn);

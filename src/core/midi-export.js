@@ -10,8 +10,7 @@
  * @module core/midi-export
  */
 
-import { TRACKS, TRACK_BY_ID } from '../data/tracks.js';
-import { midiToFreq } from '../utils.js';
+import { TRACKS } from '../data/tracks.js';
 
 /** GM drum notes (channel 9). */
 const DRUM_NOTES = {

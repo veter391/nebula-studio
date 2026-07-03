@@ -85,7 +85,7 @@ export class Visualizer {
     }
   }
 
-  onTrigger(trackId, step, time) {
+  onTrigger(trackId, _step, _time) {
     const color = TRACK_COLORS[trackId] || '0, 245, 255';
     const intensity = ({
       kick: 1.0, snare: 0.85, hat: 0.45, clap: 0.8, tom: 0.75,

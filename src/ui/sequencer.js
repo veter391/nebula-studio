@@ -101,7 +101,6 @@ export function mountSequencer(host) {
   store.on('pattern', (pattern) => {
     const rows = host.querySelectorAll('.seq__row');
     rows.forEach((row) => {
-      const ti = +row.dataset.idx;
       const id = row.dataset.track;
       const cells = row.querySelectorAll('.step');
       cells.forEach((cell) => {
