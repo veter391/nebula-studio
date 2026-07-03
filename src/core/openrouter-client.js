@@ -20,19 +20,22 @@
  */
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const MODELS_URL = 'https://openrouter.ai/api/v1/models';
 const PROXY_URL = '/api/ai';
 const STORAGE_KEY = 'nebula:openrouter_key';
 const STORAGE_MODEL_KEY = 'nebula:openrouter_model';
+const CATALOG_CACHE_KEY = 'nebula:free_model_catalog';
+const CATALOG_CACHE_TTL_MS = 60 * 60 * 1000; // 1h
 const REQUEST_TIMEOUT_MS = 25000;
 
 /**
- * Ordered fallback chain, biggest/most-capable free models first, small
- * reliable ones at the bottom as a safety net when the big ones are
- * saturated (free-tier capacity genuinely fluctuates hour to hour --
- * verified live against the OpenRouter API while building this, not
- * guessed). Used for the direct BYOK path; the shared proxy keeps its own
- * copy server-side in worker.js since the browser never sees the request
- * that matters there.
+ * Absolute last-resort model list. NOT the primary source of truth for
+ * "which free models to try" -- see getFreeModelChain() below, which
+ * fetches OpenRouter's live catalog instead. A hardcoded model ID is a
+ * real failure mode: free-tier availability changes over time,
+ * independent of this codebase, and a fully static list would eventually
+ * go stale and break the feature. Exported so the Settings UI has a
+ * reasonable list to show before the live catalog has loaded.
  */
 export const FREE_MODEL_CHAIN = [
   'nvidia/nemotron-3-ultra-550b-a55b:free',
@@ -44,6 +47,71 @@ export const FREE_MODEL_CHAIN = [
   'nvidia/nemotron-nano-9b-v2:free',
   'liquid/lfm-2.5-1.2b-instruct:free',
 ];
+
+/**
+ * Fetch and rank the live free-tier text models from OpenRouter (mirrors
+ * the same logic worker.js uses server-side for the shared proxy), cached
+ * in localStorage for an hour so BYOK mode doesn't hit /models on every
+ * single generate click. Falls back to the last cached catalog (even if
+ * stale) if the live fetch fails, and to FREE_MODEL_CHAIN only if there's
+ * no cache at all yet.
+ */
+export async function getFreeModelChain() {
+  try {
+    const cached = JSON.parse(localStorage.getItem(CATALOG_CACHE_KEY) || 'null');
+    if (cached && Date.now() - cached.fetchedAt < CATALOG_CACHE_TTL_MS && Array.isArray(cached.models) && cached.models.length) {
+      return cached.models;
+    }
+  } catch {
+    /* corrupt cache, ignore */
+  }
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(MODELS_URL, { signal: controller.signal });
+    clearTimeout(timer);
+    if (res.ok) {
+      const data = await res.json();
+      const ranked = rankFreeModels(data.data || []);
+      if (ranked.length > 0) {
+        try {
+          localStorage.setItem(CATALOG_CACHE_KEY, JSON.stringify({ models: ranked, fetchedAt: Date.now() }));
+        } catch {
+          /* storage full/unavailable — non-fatal, just skip caching */
+        }
+        return ranked;
+      }
+    }
+  } catch {
+    /* network error — fall through to stale cache / hardcoded list below */
+  }
+
+  try {
+    const cached = JSON.parse(localStorage.getItem(CATALOG_CACHE_KEY) || 'null');
+    if (cached?.models?.length) return cached.models;
+  } catch {
+    /* ignore */
+  }
+
+  return FREE_MODEL_CHAIN;
+}
+
+function rankFreeModels(models) {
+  return models
+    .filter((m) => m.id?.endsWith(':free'))
+    .filter((m) => m.architecture?.modality === 'text->text' || m.architecture?.input_modalities?.includes('text'))
+    .map((m) => ({ id: m.id, size: parseParamCount(m.name, m.description), ctx: m.context_length || 0 }))
+    .sort((a, b) => b.size - a.size || b.ctx - a.ctx)
+    .map((m) => m.id);
+}
+
+function parseParamCount(name = '', description = '') {
+  const text = `${name} ${description}`;
+  const matches = [...text.matchAll(/(\d+(?:\.\d+)?)\s*B\b/gi)];
+  if (matches.length === 0) return 0;
+  return Math.max(...matches.map((m) => parseFloat(m[1])));
+}
 
 export function getStoredKey() {
   try {
@@ -148,7 +216,9 @@ export async function chatText(messages, opts = {}) {
 
   try {
     if (apiKey) {
-      const models = opts.models || (getPreferredModel() ? [getPreferredModel(), ...FREE_MODEL_CHAIN] : FREE_MODEL_CHAIN);
+      const chain = opts.models || (await getFreeModelChain());
+      const preferred = getPreferredModel();
+      const models = preferred ? [preferred, ...chain.filter((m) => m !== preferred)] : chain;
       let lastError = 'Unknown error';
       for (const model of models) {
         try {

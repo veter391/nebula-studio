@@ -12,19 +12,25 @@
  * Everything that isn't a POST to /api/ai falls straight through to the
  * static asset handler -- this Worker does not touch the rest of the app.
  *
+ * MODEL SELECTION is dynamic, not a hardcoded list -- see pickFreeModels()
+ * below. A hardcoded model ID is a real, observed failure mode: OpenRouter's
+ * free-tier catalog changes (models get added, retired, or stop being
+ * free) independently of this codebase. Instead this fetches the live
+ * catalog from OpenRouter, ranks free text models by size, and falls back
+ * through three layers if that fetch itself fails -- see the docstring on
+ * pickFreeModels for the exact fallback order.
+ *
  * @module worker
  */
 
-const FREE_MODEL_CHAIN = [
-  'nvidia/nemotron-3-ultra-550b-a55b:free',
-  'nousresearch/hermes-3-llama-3.1-405b:free',
-  'openai/gpt-oss-120b:free',
-  'nvidia/nemotron-3-super-120b-a12b:free',
-  'qwen/qwen3-next-80b-a3b-instruct:free',
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'nvidia/nemotron-nano-9b-v2:free',
-  'liquid/lfm-2.5-1.2b-instruct:free',
-];
+// Absolute last resort ONLY -- used if OpenRouter's /models endpoint is
+// unreachable AND there's no cached catalog at all yet (i.e. this Worker
+// isolate has never successfully fetched the live list). Kept short and
+// only as a final safety net, not the primary source of truth.
+const HARDCODED_FALLBACK = ['meta-llama/llama-3.3-70b-instruct:free', 'nvidia/nemotron-nano-9b-v2:free'];
+
+const CATALOG_CACHE_TTL_SECONDS = 3600; // 1h -- free-tier catalog doesn't change minute to minute
+const CATALOG_CACHE_URL = 'https://nebula-studio.internal/free-model-catalog'; // cache key only, never fetched
 
 // Cloudflare's native rate-limit binding only supports 10s/60s windows
 // (burst protection), not a real "N per hour" quota -- see wrangler.toml.
@@ -36,7 +42,7 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname === '/api/ai' && request.method === 'POST') {
-      return handleAIProxy(request, env);
+      return handleAIProxy(request, env, ctx);
     }
 
     // Everything else: serve the static site as normal.
@@ -44,7 +50,77 @@ export default {
   },
 };
 
-async function handleAIProxy(request, env) {
+/**
+ * Fetch and rank the current free-tier text models from OpenRouter's own
+ * catalog, cached via the Workers Cache API for an hour so we don't hit
+ * /models on every chat request. Three-layer fallback:
+ *
+ *   1. Fresh live fetch (or a cache hit within the TTL) -- the normal path.
+ *   2. A stale cached catalog, if the live fetch fails but we have *any*
+ *      previously-cached result (better an hour-old real list than nothing).
+ *   3. HARDCODED_FALLBACK, only if neither of the above ever worked.
+ *
+ * Ranking: parses an approximate parameter count ("405B", "70B", "1.2B"...)
+ * out of the model's name/description -- OpenRouter doesn't expose a clean
+ * numeric field for this -- and sorts biggest first, tie-broken by context
+ * length. This is a heuristic, not a guarantee of quality; the actual
+ * safety net is that every model response still goes through the same
+ * strict JSON/genre validation as before, so a poorly-ranked model just
+ * costs a wasted round-trip before the next one in the chain, never a
+ * wrong result reaching the audio engine.
+ */
+async function pickFreeModels(env, ctx) {
+  const cache = caches.default;
+  const cacheKey = new Request(CATALOG_CACHE_URL);
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch('https://openrouter.ai/api/v1/models', { signal: controller.signal });
+    clearTimeout(timer);
+    if (res.ok) {
+      const data = await res.json();
+      const ranked = rankFreeModels(data.data || []);
+      if (ranked.length > 0) {
+        const cacheResponse = new Response(JSON.stringify(ranked), {
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': `max-age=${CATALOG_CACHE_TTL_SECONDS}` },
+        });
+        ctx.waitUntil(cache.put(cacheKey, cacheResponse));
+        return ranked;
+      }
+    }
+  } catch {
+    // fall through to cache / hardcoded fallback below
+  }
+
+  const cached = await cache.match(cacheKey);
+  if (cached) {
+    const stale = await cached.json().catch(() => null);
+    if (Array.isArray(stale) && stale.length > 0) return stale;
+  }
+
+  return HARDCODED_FALLBACK;
+}
+
+/** Extract "text->text" free models and rank by approximate size, then context length. */
+function rankFreeModels(models) {
+  return models
+    .filter((m) => m.id?.endsWith(':free'))
+    .filter((m) => m.architecture?.modality === 'text->text' || m.architecture?.input_modalities?.includes('text'))
+    .map((m) => ({ id: m.id, size: parseParamCount(m.name, m.description), ctx: m.context_length || 0 }))
+    .sort((a, b) => b.size - a.size || b.ctx - a.ctx)
+    .map((m) => m.id);
+}
+
+/** Best-effort "how many billions of parameters" guess from free-text model metadata. */
+function parseParamCount(name = '', description = '') {
+  const text = `${name} ${description}`;
+  const matches = [...text.matchAll(/(\d+(?:\.\d+)?)\s*B\b/gi)];
+  if (matches.length === 0) return 0;
+  return Math.max(...matches.map((m) => parseFloat(m[1])));
+}
+
+async function handleAIProxy(request, env, ctx) {
   if (!env.OPENROUTER_KEY) {
     return json({ ok: false, error: 'Shared AI is not configured on this deployment.' }, 503);
   }
@@ -86,8 +162,9 @@ async function handleAIProxy(request, env) {
     return json({ ok: false, error: 'Prompt too long.' }, 400);
   }
 
+  const models = await pickFreeModels(env, ctx);
   let lastError = 'Unknown error';
-  for (const model of FREE_MODEL_CHAIN) {
+  for (const model of models) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {

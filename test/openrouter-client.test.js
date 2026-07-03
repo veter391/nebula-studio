@@ -76,6 +76,18 @@ describe('chatText — shared mode (no key)', () => {
 });
 
 describe('chatText — byok mode (key stored)', () => {
+  // getFreeModelChain() fetches OpenRouter's live catalog and caches it in
+  // localStorage — pre-seed that cache so these tests exercise the actual
+  // chat-completion call count in isolation, without also asserting on the
+  // (separately-tested) catalog fetch. A cache hit is itself the intended
+  // behavior: real usage shouldn't re-fetch /models on every generate click.
+  beforeEach(() => {
+    localStorage.setItem(
+      'nebula:free_model_catalog',
+      JSON.stringify({ models: ['test/model-a:free', 'test/model-b:free'], fetchedAt: Date.now() })
+    );
+  });
+
   it('calls openrouter.ai directly with the stored key, never our proxy', async () => {
     mod.setStoredKey('sk-or-v1-mykey');
     fetch.mockResolvedValue({
@@ -109,6 +121,50 @@ describe('chatText — byok mode (key stored)', () => {
     expect(result.ok).toBe(false);
     expect(result.isConfigError).toBe(true);
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('getFreeModelChain — dynamic catalog with layered fallback', () => {
+  it('fetches and ranks the live catalog by parsed size, biggest first', async () => {
+    fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [
+          { id: 'small/model:free', name: 'Small Model 8B', architecture: { modality: 'text->text' }, context_length: 8000 },
+          { id: 'big/model:free', name: 'Big Model 405B', architecture: { modality: 'text->text' }, context_length: 8000 },
+          { id: 'not-free/model', name: 'Paid Model 999B', architecture: { modality: 'text->text' } }, // no :free suffix, must be excluded
+          { id: 'image/model:free', name: 'Image Model 70B', architecture: { modality: 'text->image' } }, // wrong modality, must be excluded
+        ],
+      }),
+    });
+    const chain = await mod.getFreeModelChain();
+    expect(chain).toEqual(['big/model:free', 'small/model:free']);
+  });
+
+  it('caches the result in localStorage so a second call does not re-fetch', async () => {
+    fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ id: 'x/model:free', name: 'X 10B', architecture: { modality: 'text->text' } }] }),
+    });
+    await mod.getFreeModelChain();
+    await mod.getFreeModelChain();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to a stale cached catalog if the live fetch fails', async () => {
+    localStorage.setItem(
+      'nebula:free_model_catalog',
+      JSON.stringify({ models: ['stale/model:free'], fetchedAt: Date.now() - 999999999 }) // expired TTL
+    );
+    fetch.mockRejectedValue(new Error('network down'));
+    const chain = await mod.getFreeModelChain();
+    expect(chain).toEqual(['stale/model:free']);
+  });
+
+  it('falls back to the hardcoded FREE_MODEL_CHAIN if there is no cache at all and the fetch fails', async () => {
+    fetch.mockRejectedValue(new Error('network down'));
+    const chain = await mod.getFreeModelChain();
+    expect(chain).toEqual(mod.FREE_MODEL_CHAIN);
   });
 });
 
