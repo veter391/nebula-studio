@@ -7,7 +7,8 @@
  *   engine.play() / engine.stop()  — transport
  *   engine.toggleCell / setCell    — pattern edits that also feed the scheduler
  *   engine.previewTrack            — trigger a single track live
- *   engine.previewNote             — trigger a tonal note (for the virtual keyboard)
+ *   engine.previewNote             — trigger a one-shot tonal note (chord pad / previews)
+ *   engine.startNote / stopNote    — held note-on/note-off pair (virtual keyboard sustain)
  *   engine.updateTrackSettings     — apply new per-track FX / gain
  *   engine.updateMasterFx          — apply master FX
  *   engine.exportWAV / exportMIDI  — offline render
@@ -18,13 +19,11 @@
 
 import { Emitter, midiToFreq } from '../utils.js';
 import { TRACKS, TRACK_BY_ID } from '../data/tracks.js';
-import { VOICES, makeNoiseBuffer } from './voices.js';
+import { VOICES, makeNoiseBuffer, startSustainedVoice, stopSustainedVoice } from './voices.js';
 import { makeTrackFx, makeMasterBus, makeRecorder } from './effects.js';
 import { Scheduler } from './scheduler.js';
 import { audioBufferToWav } from './wav-encoder.js';
 import { patternToMidiBlob } from './midi-export.js';
-
-'use strict';
 
 export class AudioEngine extends Emitter {
   constructor() {
@@ -195,6 +194,48 @@ export class AudioEngine extends Emitter {
     }
     // tonal
     this.trigger(trackId, { freq: midiToFreq(midi), dur: 0.4 });
+  }
+
+  /**
+   * Begin a HELD note for `trackId` at `midi` (attack into sustain, stays
+   * open until `stopNote` is called). Used by the virtual keyboard so a
+   * key held down keeps sounding instead of firing a fixed-length preview.
+   *
+   * Returns an opaque handle to pass to `stopNote`, or null if the track's
+   * voice has no sustained variant (e.g. drums) or the engine isn't ready.
+   */
+  startNote(trackId, midi) {
+    if (!this.initialized) return null;
+    const tr = TRACK_BY_ID[trackId];
+    if (!tr) return null;
+    const fx = this.trackFx[trackId];
+    if (!fx) return null;
+    const time = this.ctx.currentTime + 0.005;
+    let voiceHandle;
+    try {
+      voiceHandle = startSustainedVoice(tr.voice, this.ctx, fx.input, time, { freq: midiToFreq(midi) });
+    } catch (e) {
+      console.warn('[engine] startNote failed', trackId, e);
+      return null;
+    }
+    if (!voiceHandle) return null;
+    // `midi` is included alongside the existing trackId/time/step fields so
+    // consumers that only care about the visual pulse (the visualizer) are
+    // unaffected, while new listeners (e.g. the Learn play-along mode) can
+    // tell exactly which note was actually played.
+    this.emit('trigger', { trackId, time, step: -1, midi });
+    return { trackId, voiceHandle };
+  }
+
+  /** Release a note started with `startNote`. Safe to call with null/already-released handles. */
+  stopNote(handle) {
+    if (!this.initialized || !handle) return;
+    const time = this.ctx.currentTime + 0.005;
+    try {
+      stopSustainedVoice(handle.voiceHandle, this.ctx, time);
+    } catch (e) {
+      console.warn('[engine] stopNote failed', handle.trackId, e);
+    }
   }
 
   /** Start playback. */

@@ -13,8 +13,6 @@
 import { TRACK_IDS, TRACKS } from './data/tracks.js';
 import { CHORD_TYPES, PROGRESSIONS, midiToFreq, midiToName } from './utils.js';
 
-'use strict';
-
 /** Tiny seeded RNG (mulberry32). */
 function rng(seed) {
   let a = seed | 0;

@@ -4,8 +4,6 @@
  * @module core/wav-encoder
  */
 
-'use strict';
-
 /**
  * Encode an AudioBuffer as a 16-bit PCM WAV file.
  * @param {AudioBuffer} buffer
@@ -45,7 +43,7 @@ export function audioBufferToWav(buffer) {
   for (let i = 0; i < numCh; i++) channels.push(buffer.getChannelData(i));
   for (let i = 0; i < buffer.length; i++) {
     for (let ch = 0; ch < numCh; ch++) {
-      let s = Math.max(-1, Math.min(1, channels[ch][i]));
+      const s = Math.max(-1, Math.min(1, channels[ch][i]));
       view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
       offset += 2;
     }

@@ -1,6 +1,22 @@
 name = "nebula-studio"
 compatibility_date = "2026-01-01"
+main = "worker.js"
 
 [assets]
 directory = "."
+binding = "ASSETS"
 not_found_handling = "404-page"
+
+# OPENROUTER_KEY is a secret, set via `wrangler secret put OPENROUTER_KEY` --
+# it is never written here and never committed. See AI-NOTES.md.
+
+# Rate limiting API only supports 10s/60s windows (burst protection),
+# not long quotas like "N per hour" -- see worker.js for what this actually
+# enforces.
+[[ratelimits]]
+name = "AI_RATE_LIMITER"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 6
+  period = 60

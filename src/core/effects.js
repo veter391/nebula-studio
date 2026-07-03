@@ -9,8 +9,6 @@
 
 import { makeSatCurve, makeNoiseBuffer } from './voices.js';
 
-'use strict';
-
 /** Three-band EQ (low shelf @ 250Hz, peaking mid @ 1kHz, high shelf @ 4kHz). */
 export function makeEQ(ctx) {
   const low = ctx.createBiquadFilter();

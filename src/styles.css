@@ -1473,6 +1473,54 @@ input[type="range"]::-moz-range-thumb {
   color: var(--accent);
 }
 
+/* ---------- Keyboard mode toggle ---------- */
+.kb__mode-toggle {
+  padding: 8px 14px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  transition: all 0.15s;
+}
+.kb__mode-toggle:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.kb__mode-toggle.is-active {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.kb__mode-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+.kb__mode-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+  animation: kbModeDotPulse 1.4s ease-in-out infinite;
+}
+@keyframes kbModeDotPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.kb--mode-active .kb__keys {
+  box-shadow: 0 0 0 1px var(--accent), 0 0 18px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
 /* ---------- Tutorials ---------- */
 .learn__layout {
   display: grid;
@@ -1663,6 +1711,11 @@ input[type="range"]::-moz-range-thumb {
     0 0 24px color-mix(in srgb, var(--accent) 35%, transparent),
     0 18px 60px rgba(0, 0, 0, 0.55);
   position: relative;
+  /* Prevent the tooltip from overflowing short viewports (landscape phones,
+     or a lesson step with a long body) — scroll inside the card instead. */
+  max-height: min(420px, 80vh);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .coach__step {
   font-family: var(--font-mono);
@@ -1789,7 +1842,7 @@ input[type="range"]::-moz-range-thumb {
 }
 @media (max-width: 800px) {
   .topbar { grid-template-columns: 1fr; gap: 14px; }
-  .meta { justify-content: flex-start; }
+  .meta { justify-content: flex-start; flex-wrap: wrap; row-gap: 10px; }
   .transport { justify-content: flex-start; }
   .theme-switch { flex-wrap: wrap; }
   .mixer__grid { grid-template-columns: repeat(2, 1fr); }
@@ -1799,6 +1852,16 @@ input[type="range"]::-moz-range-thumb {
   .learn__layout { grid-template-columns: 1fr; }
   .foot { flex-direction: column; gap: 8px; align-items: flex-start; }
   .t-btn__label { display: none; }
+
+  /* Learn tab lesson card: bump tappable controls to a real touch target
+     (~40px) instead of the desktop-oriented compact sizing. */
+  .learn__actions .big-btn,
+  .coach__btn {
+    min-height: 40px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+  .learn__actions { flex-wrap: wrap; }
 }
 @media (max-width: 500px) {
   .mixer__grid { grid-template-columns: 1fr 1fr; }
@@ -1808,4 +1871,180 @@ input[type="range"]::-moz-range-thumb {
      is the practical middle ground for this layout. */
   .seq__ctrl { opacity: 1; gap: 6px; }
   .seq__mini-btn { width: 26px; height: 26px; }
+}
+
+/* ---------- Phone-width fixes (iPhone SE/375 up to common 414 widths) ---------- */
+@media (max-width: 480px) {
+  /* Coach mark (Learn tab lesson popup): fixed 320px card is wider than a
+     375px viewport once the 12px side padding is added (320 + 24 = 344 is
+     technically fine, but anything narrower than ~344px, e.g. a device in
+     a browser with rounded viewport insets, would clip). Scale the card to
+     the viewport instead of a fixed px width, and let JS's `left` clamp
+     (pad = 12) keep it inside the safe area. */
+  .coach {
+    width: min(320px, calc(100vw - 24px));
+  }
+  .coach__card {
+    padding: 14px 14px;
+    max-height: min(360px, 72vh);
+  }
+  .coach__actions {
+    flex-wrap: wrap;
+  }
+  .coach__btn {
+    flex: 1 1 auto;
+    text-align: center;
+  }
+
+  /* BPM/swing controls: stop the fixed-width swing slider from forcing
+     horizontal overflow inside .meta once it wraps to its own line. */
+  .meta__swing input[type='range'] { width: 100%; max-width: 160px; }
+  .meta { gap: 12px; }
+
+  /* Learn tab: side list and lesson card both go full width already via
+     the 800px breakpoint — just tighten padding so nothing crowds 375px. */
+  .learn__card { padding: 16px; min-height: 0; }
+  .learn__item { padding: 10px 8px; }
+
+  /* Song mode transport buttons: guarantee a real touch target. */
+  .song__playback .big-btn { min-height: 40px; }
+
+  /* Master FX knobs: 4-across grid on a 375px card can get tight once
+     padding is included; drop to 2 columns so each knob keeps a
+     comfortable touch/drag area instead of shrinking indefinitely. */
+  .master__knobs { grid-template-columns: repeat(2, 1fr); gap: 14px 10px; }
+
+  /* Presets bar: filter input + genre select + roll button in one
+     no-wrap flex row can exceed a 375px card's content width because the
+     select/button have intrinsic min-content sizes. Let it wrap. */
+  .presets__bar { flex-wrap: wrap; }
+  .presets__filter { flex: 1 1 100%; }
+  .presets__ai { flex: 1 1 auto; }
+}
+
+/* ---------- Desktop-only feature notice ---------- */
+/* Shown on narrow viewports above panels that fundamentally depend on a
+   physical keyboard (computer-key note triggering). The panel itself stays
+   fully interactive via mouse/touch — this is informational only. */
+.desktop-only-notice {
+  display: none;
+}
+@media (max-width: 800px) {
+  .desktop-only-notice {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    background: color-mix(in srgb, var(--accent-2) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-2) 30%, var(--line));
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    line-height: 1.4;
+  }
+  .desktop-only-notice__icon { flex-shrink: 0; font-size: 14px; }
+}
+
+/* ---------- Play Along (Learn tab practice mode) ---------- */
+.pa__picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+.pa__song {
+  text-align: left;
+  padding: 14px;
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  transition: border-color 0.15s, transform 0.15s;
+}
+.pa__song:hover { border-color: var(--accent); transform: translateY(-1px); }
+.pa__song-name { display: block; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.pa__song-desc { display: block; font-size: 11.5px; color: var(--text-dim); line-height: 1.4; }
+
+.pa__now {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.pa__now-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--text-mute);
+}
+.pa__now-note {
+  font-family: var(--font-mono);
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.pa__now-key {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.pa__highway {
+  position: relative;
+  height: 64px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  margin-bottom: 12px;
+}
+.pa__playhead {
+  position: absolute;
+  left: 25%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent-2);
+  box-shadow: 0 0 10px var(--accent-2);
+  z-index: 2;
+}
+.pa__lane {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  will-change: transform;
+}
+.pa__note {
+  position: absolute;
+  top: 12px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text);
+}
+.pa__note.is-hit { background: color-mix(in srgb, var(--c-lime) 30%, transparent); border-color: var(--c-lime); }
+.pa__note.is-miss { background: color-mix(in srgb, var(--c-rose) 20%, transparent); border-color: var(--c-rose); opacity: 0.6; }
+
+.pa__controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.pa__score {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+@media (max-width: 800px) {
+  .pa__now-note { font-size: 22px; }
+  .pa__highway { height: 56px; }
 }

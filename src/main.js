@@ -19,11 +19,17 @@ import { mountMixer } from './ui/mixer.js';
 import { mountVisualizer } from './ui/visualizer.js';
 import { mountPresets } from './ui/presets.js';
 import { mountSong } from './ui/song.js';
-import { mountKeyboard } from './ui/keyboard.js';
+import { mountKeyboard, isKeyboardModeActive } from './ui/keyboard.js';
 import { mountTutorials } from './ui/tutorials.js';
+import { mountPlayAlong } from './ui/play-along.js';
 import { TRACKS } from './data/tracks.js';
 
-'use strict';
+/* ---------- PWA: offline support ---------- */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((e) => console.warn('[sw] registration failed', e));
+  });
+}
 
 /* ---------- Background starfield ---------- */
 (function makeStars() {
@@ -81,6 +87,7 @@ bootBtn.addEventListener('click', async () => {
   mountSong(document.getElementById('songHost'));
   mountKeyboard(document.getElementById('keyboardHost'));
   mountTutorials(document.getElementById('learnHost'));
+  mountPlayAlong(document.getElementById('playAlongHost'));
 
   // connect engine events to visualizer
   engine.on('trigger', (e) => viz.onTrigger(e.trackId, e.step, e.time));
@@ -120,6 +127,38 @@ function onGlobalKey(e) {
     else store.undo();
     e.preventDefault();
     return;
+  }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  // While Keyboard Mode owns the letter keys for playing notes, the
+  // transport/clear/export shortcuts must stay out of the way entirely —
+  // only Escape (handled inside keyboard.js) and the explicit exit button
+  // get you out, per the intended "no stray shortcuts" behavior.
+  if (isKeyboardModeActive()) return;
+  switch (e.key) {
+    case ' ':
+      if (!e.repeat) document.getElementById('playBtn')?.click();
+      e.preventDefault();
+      return;
+    case 'c':
+    case 'C':
+      if (!e.repeat) document.getElementById('clearBtn')?.click();
+      e.preventDefault();
+      return;
+    case 'r':
+    case 'R':
+      if (!e.repeat) document.getElementById('recBtn')?.click();
+      e.preventDefault();
+      return;
+    case 'e':
+    case 'E':
+      if (!e.repeat) document.getElementById('exportWavBtn')?.click();
+      e.preventDefault();
+      return;
+    case 'm':
+    case 'M':
+      if (!e.repeat) document.getElementById('exportMidiBtn')?.click();
+      e.preventDefault();
+      return;
   }
 }
 

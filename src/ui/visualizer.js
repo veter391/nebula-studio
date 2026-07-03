@@ -11,8 +11,6 @@
 import { store } from '../store.js';
 import { engine } from '../core/engine.js';
 
-'use strict';
-
 const TRACK_COLORS = {
   kick: '255, 94, 122',
   snare: '255, 184, 77',
@@ -291,7 +289,7 @@ export class Visualizer {
     }
 
     // shockwaves (swap-pop, O(1) removal)
-    let sw = this.shockwaves;
+    const sw = this.shockwaves;
     for (let i = sw.length - 1; i >= 0; i--) {
       const s = sw[i];
       s.r += dt * 180;
@@ -310,7 +308,7 @@ export class Visualizer {
 
     // particles (swap-pop)
     ctx.globalCompositeOperation = 'lighter';
-    let ps = this.particles;
+    const ps = this.particles;
     for (let i = ps.length - 1; i >= 0; i--) {
       const p = ps[i];
       p.x += p.vx;

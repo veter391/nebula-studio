@@ -10,8 +10,6 @@
 
 import { Emitter } from '../utils.js';
 
-'use strict';
-
 export class Scheduler extends Emitter {
   /**
    * @param {AudioContext} ctx

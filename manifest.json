@@ -1,0 +1,19 @@
+{
+  "name": "Nebula Studio 2.0",
+  "short_name": "Nebula",
+  "description": "Browser-based beat maker — Web Audio API, zero dependencies, works offline once loaded.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#05010d",
+  "theme_color": "#0a0014",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/public/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

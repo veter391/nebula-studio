@@ -9,8 +9,6 @@ import { engine } from '../core/engine.js';
 import { THEMES } from '../data/themes.js';
 import { downloadBlob } from '../utils.js';
 
-'use strict';
-
 /** Mount all shell components. Returns cleanup function. */
 export function mountShell(host, hooks = {}) {
   host.innerHTML = `

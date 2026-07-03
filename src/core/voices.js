@@ -11,8 +11,6 @@
  * @module core/voices
  */
 
-'use strict';
-
 /** Generate a white-noise buffer of `duration` seconds, length 1 channel. */
 export function makeNoiseBuffer(ctx, duration = 1) {
   const len = Math.floor(ctx.sampleRate * duration);
@@ -358,6 +356,220 @@ export function fx(ctx, dest, t, opts = {}) {
   g.gain.exponentialRampToValueAtTime(0.001, t + 0.65);
   noise.connect(bp).connect(g).connect(dest);
   noise.start(t); noise.stop(t + 0.7);
+}
+
+/* ------------------------------------------------------------------
+ * SUSTAINED TONAL VOICES
+ *
+ * The one-shot voices above bake attack/decay/sustain/release into a
+ * single fire-and-forget call — perfect for pattern playback, but wrong
+ * for a held computer-keyboard note (there is no "note off" to react
+ * to). SUSTAINED_VOICES splits the tonal voices into:
+ *
+ *   start(ctx, dest, time, opts) -> handle   attack, then hold open
+ *                                             indefinitely at sustain level
+ *   stop(handle, time)                        release ramp + node cleanup
+ *
+ * A handle is an opaque object private to this module; callers must not
+ * reach into it, only pass it back to `stop`.
+ * ------------------------------------------------------------------ */
+
+const SUSTAIN_LEVELS = {
+  sub: 0.7,
+  bass: 0.65,
+  lead: 0.3,
+  pluck: 0.5,
+  pad: 0.11,
+};
+
+const RELEASE_TIME = 0.25; // seconds, exponential ramp to silence
+
+/** Ramp `param` down to (near) zero starting at `time`, exponential release. */
+function releaseGain(param, time, from) {
+  param.cancelScheduledValues(time);
+  // exponentialRampToValueAtTime requires a non-zero starting value
+  param.setValueAtTime(Math.max(from, 0.0001), time);
+  param.exponentialRampToValueAtTime(0.0001, time + RELEASE_TIME);
+}
+
+/** Stop + disconnect a list of oscillator/source nodes shortly after release completes. */
+function scheduleCleanup(nodes, time) {
+  const stopAt = time + RELEASE_TIME + 0.05;
+  nodes.forEach((n) => {
+    try {
+      n.stop(stopAt);
+    } catch (e) {
+      /* already stopped */
+    }
+  });
+}
+
+/** sub — held sine tone. */
+function startSub(ctx, dest, t, opts = {}) {
+  const freq = opts.freq ?? 55;
+  const osc = ctx.createOscillator();
+  const g = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.value = freq;
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(SUSTAIN_LEVELS.sub, t + 0.008);
+  osc.connect(g).connect(dest);
+  osc.start(t);
+  return { gain: g, nodes: [osc], level: SUSTAIN_LEVELS.sub };
+}
+
+/** bass — held saw + sub with LP filter settled at its sustain cutoff. */
+function startBass(ctx, dest, t, opts = {}) {
+  const freq = opts.freq ?? 55;
+  const osc = ctx.createOscillator();
+  const subOsc = ctx.createOscillator();
+  const lp = ctx.createBiquadFilter();
+  const g = ctx.createGain();
+  osc.type = 'sawtooth';
+  subOsc.type = 'sine';
+  osc.frequency.value = freq;
+  subOsc.frequency.value = freq / 2;
+  lp.type = 'lowpass';
+  lp.frequency.setValueAtTime(2200, t);
+  lp.frequency.exponentialRampToValueAtTime(700, t + 0.3);
+  lp.Q.value = 6;
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(SUSTAIN_LEVELS.bass, t + 0.008);
+  osc.connect(lp);
+  subOsc.connect(lp);
+  lp.connect(g).connect(dest);
+  osc.start(t);
+  subOsc.start(t);
+  return { gain: g, nodes: [osc, subOsc], level: SUSTAIN_LEVELS.bass };
+}
+
+/** lead — held square + detuned saw + vibrato, LP settles rather than sweeping shut. */
+function startLead(ctx, dest, t, opts = {}) {
+  const freq = opts.freq ?? 440;
+  const osc1 = ctx.createOscillator();
+  const osc2 = ctx.createOscillator();
+  const lp = ctx.createBiquadFilter();
+  const g = ctx.createGain();
+  osc1.type = 'square';
+  osc2.type = 'sawtooth';
+  osc1.frequency.value = freq;
+  osc2.frequency.value = freq * 1.005;
+
+  const lfo = ctx.createOscillator();
+  const lfoG = ctx.createGain();
+  lfo.frequency.value = 6;
+  lfoG.gain.value = freq * 0.008;
+  lfo.connect(lfoG).connect(osc1.frequency);
+  lfo.connect(lfoG).connect(osc2.frequency);
+
+  lp.type = 'lowpass';
+  lp.frequency.setValueAtTime(3000, t);
+  lp.frequency.exponentialRampToValueAtTime(1400, t + 0.25);
+  lp.Q.value = 4;
+
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(SUSTAIN_LEVELS.lead, t + 0.01);
+
+  osc1.connect(lp);
+  osc2.connect(lp);
+  lp.connect(g).connect(dest);
+  osc1.start(t);
+  osc2.start(t);
+  lfo.start(t);
+  return { gain: g, nodes: [osc1, osc2, lfo], level: SUSTAIN_LEVELS.lead };
+}
+
+/** pluck — held sine + harmonic (naturally decays a touch even while held, then releases on stop). */
+function startPluck(ctx, dest, t, opts = {}) {
+  const freq = opts.freq ?? 440;
+  const osc = ctx.createOscillator();
+  const osc2 = ctx.createOscillator();
+  const g = ctx.createGain();
+  const g2 = ctx.createGain();
+  osc.type = 'sine';
+  osc2.type = 'triangle';
+  osc.frequency.value = freq;
+  osc2.frequency.value = freq * 2;
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(SUSTAIN_LEVELS.pluck, t + 0.004);
+  g2.gain.setValueAtTime(0, t);
+  g2.gain.linearRampToValueAtTime(0.18, t + 0.004);
+  g2.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+  osc.connect(g).connect(dest);
+  osc2.connect(g2).connect(dest);
+  osc.start(t);
+  osc2.start(t);
+  return { gain: g, nodes: [osc, osc2], level: SUSTAIN_LEVELS.pluck };
+}
+
+/** pad — held detuned-saw triad + slow LFO, sustained at its plateau level. */
+function startPad(ctx, dest, t, opts = {}) {
+  const root = opts.freq ?? 220;
+  const freqs = [root, root * 1.5, root * 2];
+  const nodes = [];
+  const gains = [];
+  freqs.forEach((f, idx) => {
+    const osc = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    const g = ctx.createGain();
+    const lp = ctx.createBiquadFilter();
+    osc.type = 'sawtooth';
+    osc2.type = 'sawtooth';
+    osc.frequency.value = f;
+    osc2.frequency.value = f * 1.007;
+    lp.type = 'lowpass';
+    lp.frequency.value = 1100;
+    lp.Q.value = 1.5;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(SUSTAIN_LEVELS.pad, t + 0.18);
+    const lfo = ctx.createOscillator();
+    const lfoG = ctx.createGain();
+    lfo.frequency.value = 0.4 + idx * 0.15;
+    lfoG.gain.value = 400;
+    lfo.connect(lfoG).connect(lp.frequency);
+    osc.connect(lp);
+    osc2.connect(lp);
+    lp.connect(g).connect(dest);
+    osc.start(t);
+    osc2.start(t);
+    lfo.start(t);
+    nodes.push(osc, osc2, lfo);
+    gains.push(g);
+  });
+  // Merge all per-voicing gains behind one virtual "gain" handle so stop()
+  // has a single place to trigger the release from.
+  const master = ctx.createGain();
+  master.gain.value = 1;
+  gains.forEach((g) => g.disconnect(dest));
+  gains.forEach((g) => g.connect(master).connect(dest));
+  return { gain: master, nodes, level: 1, extraGains: gains };
+}
+
+/** Registry of held-note starters, keyed by voice name. */
+export const SUSTAINED_VOICES = {
+  sub: { start: startSub },
+  bass: { start: startBass },
+  lead: { start: startLead },
+  pluck: { start: startPluck },
+  pad: { start: startPad },
+};
+
+/**
+ * Begin a held note for `voiceName` and return an opaque handle.
+ * Returns null if the voice has no sustained variant (e.g. drums).
+ */
+export function startSustainedVoice(voiceName, ctx, dest, t, opts = {}) {
+  const entry = SUSTAINED_VOICES[voiceName];
+  if (!entry) return null;
+  return entry.start(ctx, dest, t, opts);
+}
+
+/** Release a handle returned by `startSustainedVoice`, ramping to silence and cleaning up. */
+export function stopSustainedVoice(handle, ctx, t) {
+  if (!handle) return;
+  const releaseAt = t ?? ctx.currentTime;
+  releaseGain(handle.gain.gain, releaseAt, handle.level);
+  scheduleCleanup(handle.nodes, releaseAt);
 }
 
 /* ------------------------------------------------------------------

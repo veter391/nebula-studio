@@ -4,12 +4,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // they verify the *contract* between the LLM's output and the deterministic
 // engine: the model may only ever select a value from a fixed, validated
 // vocabulary. Garbage in must not reach the audio engine unfiltered.
+//
+// AI is available by default (shared server-side proxy, no key required) —
+// see core/openrouter-client.js for the BYOK-vs-shared-proxy split. These
+// tests operate one level above that: they only care that suggestFromPrompt
+// enforces the contract on whatever chatJSON returns, regardless of which
+// transport produced it.
 vi.mock('../src/core/openrouter-client.js', () => ({
   chatJSON: vi.fn(),
-  hasLiveAI: vi.fn(),
 }));
 
-import { chatJSON, hasLiveAI } from '../src/core/openrouter-client.js';
+import { chatJSON } from '../src/core/openrouter-client.js';
 import { suggestFromPrompt } from '../src/ai-assistant.js';
 import { AI, generatePattern } from '../src/ai.js';
 
@@ -18,23 +23,13 @@ beforeEach(() => {
 });
 
 describe('suggestFromPrompt — the tool-contract boundary between LLM and engine', () => {
-  it('never calls the model at all when no key is configured', async () => {
-    hasLiveAI.mockReturnValue(false);
-    const result = await suggestFromPrompt('dark warehouse rave');
-    expect(result.ok).toBe(false);
-    expect(result.isConfigError).toBe(true);
-    expect(chatJSON).not.toHaveBeenCalled();
-  });
-
   it('rejects an empty prompt without calling the model', async () => {
-    hasLiveAI.mockReturnValue(true);
     const result = await suggestFromPrompt('   ');
     expect(result.ok).toBe(false);
     expect(chatJSON).not.toHaveBeenCalled();
   });
 
-  it('passes through a network/parse failure from the client unchanged', async () => {
-    hasLiveAI.mockReturnValue(true);
+  it('passes through a network/parse/rate-limit failure from the client unchanged', async () => {
     chatJSON.mockResolvedValue({ ok: false, error: 'All models failed.' });
     const result = await suggestFromPrompt('cozy sunday morning');
     expect(result.ok).toBe(false);
@@ -42,7 +37,6 @@ describe('suggestFromPrompt — the tool-contract boundary between LLM and engin
   });
 
   it('accepts a valid, in-vocabulary genre and defers entirely to the deterministic engine', async () => {
-    hasLiveAI.mockReturnValue(true);
     chatJSON.mockResolvedValue({
       ok: true,
       model: 'test-model',
@@ -60,7 +54,6 @@ describe('suggestFromPrompt — the tool-contract boundary between LLM and engin
   });
 
   it('rejects a hallucinated genre outside the fixed vocabulary and falls back safely', async () => {
-    hasLiveAI.mockReturnValue(true);
     chatJSON.mockResolvedValue({
       ok: true,
       model: 'test-model',
@@ -73,7 +66,6 @@ describe('suggestFromPrompt — the tool-contract boundary between LLM and engin
   });
 
   it('clamps a hallucinated out-of-range seed instead of passing it through raw', async () => {
-    hasLiveAI.mockReturnValue(true);
     chatJSON.mockResolvedValue({
       ok: true,
       model: 'test-model',
@@ -87,7 +79,6 @@ describe('suggestFromPrompt — the tool-contract boundary between LLM and engin
   });
 
   it('handles a missing/malformed parsed payload without throwing', async () => {
-    hasLiveAI.mockReturnValue(true);
     chatJSON.mockResolvedValue({ ok: true, model: 'test-model', parsed: null });
     const result = await suggestFromPrompt('anything');
     expect(result.ok).toBe(true);

@@ -11,7 +11,7 @@
  * @module ai-assistant
  */
 
-import { chatJSON, hasLiveAI } from './core/openrouter-client.js';
+import { chatJSON } from './core/openrouter-client.js';
 import { AI } from './ai.js';
 
 const SYSTEM_PROMPT = `You are the AI Assistant inside Nebula Studio, a browser beat maker. The user describes a vibe, mood, or scene in their own words. Your only job is to map that description onto the app's existing genre engine — you never generate audio yourself. Available genres: ${AI.genres.join(', ')}. Respond with ONLY a JSON object: {"genre": one of the exact genre strings above, "reasoning": string (1 sentence, why this genre fits), "seedHint": integer between 1 and 999999 (pick something that feels intentional for the mood, e.g. a moodier vibe might get a different seed than an energetic one — this only affects which random variation is rolled, not the genre)}.`;
@@ -21,9 +21,6 @@ const SYSTEM_PROMPT = `You are the AI Assistant inside Nebula Studio, a browser 
  * @returns {Promise<{ok: true, genre: string, reasoning: string, pattern: object, bpm: number, swing: number, model: string} | {ok: false, error: string, isConfigError: boolean}>}
  */
 export async function suggestFromPrompt(promptText) {
-  if (!hasLiveAI()) {
-    return { ok: false, error: 'No OpenRouter API key configured.', isConfigError: true };
-  }
   if (!promptText || !promptText.trim()) {
     return { ok: false, error: 'Describe a vibe first.', isConfigError: false };
   }

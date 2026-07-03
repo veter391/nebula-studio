@@ -13,8 +13,6 @@ import { store } from '../store.js';
 import { showToast } from './shell.js';
 import { engine } from '../core/engine.js';
 
-'use strict';
-
 export function mountSong(host) {
   host.innerHTML = `
     <header class="card__head">

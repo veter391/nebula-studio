@@ -3,8 +3,6 @@
  * @module utils
  */
 
-'use strict';
-
 /** Clamp `n` between `min` and `max`. */
 export const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
 

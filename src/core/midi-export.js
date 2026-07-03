@@ -13,8 +13,6 @@
 import { TRACKS, TRACK_BY_ID } from '../data/tracks.js';
 import { midiToFreq } from '../utils.js';
 
-'use strict';
-
 /** GM drum notes (channel 9). */
 const DRUM_NOTES = {
   kick: 36, // Bass Drum 1

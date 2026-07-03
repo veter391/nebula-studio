@@ -17,8 +17,6 @@ import { store } from '../store.js';
 import { showToast } from './shell.js';
 import { TUTORIALS, TUTORIALS_BY_ID } from '../data/tutorials.js';
 
-'use strict';
-
 /* ---------- Coach mark: floating tooltip with arrow ---------- */
 
 class CoachMark {
@@ -92,8 +90,9 @@ class CoachMark {
     const r = this.targetEl.getBoundingClientRect();
     if (r.width === 0 && r.height === 0) return; // not visible
 
-    // measure the coach card
-    const cw = 320;
+    // measure the coach card — cap at 320px but shrink to fit narrow
+    // (phone-width) viewports so the card never overflows horizontally.
+    const cw = Math.min(320, window.innerWidth - 24);
     this.card.style.maxWidth = cw + 'px';
 
     // decide placement
@@ -189,6 +188,14 @@ export function mountTutorials(host) {
   }
 
   function renderActive() {
+    // Any timer armed by the previously-rendered step (autoNext setTimeout or
+    // verify setInterval) must die here. Otherwise it keeps polling/firing in
+    // the background after we've already moved to a new step, silently
+    // calling advance() again and again — the lesson appears to "skip"
+    // several steps because a stale interval from step N is still ticking
+    // while step N+1, N+2, ... are on screen.
+    clearTimers();
+
     const cardEl = host.querySelector('#learnCard');
     listEl.querySelectorAll('.learn__item').forEach((x) => x.classList.toggle('is-active', x.dataset.id === activeId));
 

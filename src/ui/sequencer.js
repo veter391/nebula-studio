@@ -12,8 +12,6 @@ import { engine } from '../core/engine.js';
 import { TRACKS } from '../data/tracks.js';
 import { resolveVar } from '../utils.js';
 
-'use strict';
-
 export function mountSequencer(host) {
   host.innerHTML = '';
   host.classList.add('seq');

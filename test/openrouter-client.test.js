@@ -1,0 +1,134 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+/**
+ * Covers the security-relevant branch: no stored key -> calls our own
+ * /api/ai proxy (never touches OpenRouter directly from the browser); a
+ * stored key -> calls OpenRouter directly with that key, never our proxy.
+ * This is the boundary that keeps a shared secret out of the browser.
+ */
+
+function makeLocalStorage() {
+  const store = new Map();
+  return {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, String(v)),
+    removeItem: (k) => store.delete(k),
+    clear: () => store.clear(),
+  };
+}
+
+let mod;
+
+beforeEach(async () => {
+  vi.resetModules();
+  vi.stubGlobal('localStorage', makeLocalStorage());
+  vi.stubGlobal('fetch', vi.fn());
+  mod = await import('../src/core/openrouter-client.js');
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe('getMode / hasLiveAI', () => {
+  it('defaults to shared mode with no key stored', () => {
+    expect(mod.getMode()).toBe('shared');
+    expect(mod.hasLiveAI()).toBe(true); // AI is always available -- shared proxy needs no setup
+  });
+
+  it('switches to byok mode once a key is stored', () => {
+    mod.setStoredKey('sk-or-v1-test');
+    expect(mod.getMode()).toBe('byok');
+  });
+
+  it('setStoredKey("") clears back to shared mode', () => {
+    mod.setStoredKey('sk-or-v1-test');
+    mod.setStoredKey('');
+    expect(mod.getMode()).toBe('shared');
+  });
+});
+
+describe('chatText — shared mode (no key)', () => {
+  it('calls our own /api/ai proxy, never openrouter.ai directly', async () => {
+    fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, content: '{"x":1}', model: 'proxy-model' }),
+    });
+    const result = await mod.chatText([{ role: 'user', content: 'hi' }]);
+    expect(result.ok).toBe(true);
+    expect(result.model).toBe('proxy-model');
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const [url] = fetch.mock.calls[0];
+    expect(url).toBe('/api/ai');
+  });
+
+  it('surfaces a rate-limit failure from the proxy without retrying client-side', async () => {
+    fetch.mockResolvedValue({
+      ok: false,
+      status: 429,
+      json: async () => ({ ok: false, error: 'rate limited', isRateLimited: true }),
+    });
+    const result = await mod.chatText([{ role: 'user', content: 'hi' }]);
+    expect(result.ok).toBe(false);
+    expect(result.isRateLimited).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(1); // no client-side retry storm against our own limiter
+  });
+});
+
+describe('chatText — byok mode (key stored)', () => {
+  it('calls openrouter.ai directly with the stored key, never our proxy', async () => {
+    mod.setStoredKey('sk-or-v1-mykey');
+    fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: '{"x":1}' } }] }),
+    });
+    const result = await mod.chatText([{ role: 'user', content: 'hi' }]);
+    expect(result.ok).toBe(true);
+    const [url, init] = fetch.mock.calls[0];
+    expect(url).toBe('https://openrouter.ai/api/v1/chat/completions');
+    expect(init.headers.Authorization).toBe('Bearer sk-or-v1-mykey');
+  });
+
+  it('walks the fallback chain on a retryable failure and still calls OpenRouter directly, not the proxy', async () => {
+    mod.setStoredKey('sk-or-v1-mykey');
+    fetch
+      .mockResolvedValueOnce({ ok: false, status: 429, json: async () => ({ error: { message: 'rate limited' } }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ choices: [{ message: { content: '{"x":1}' } }] }) });
+    const result = await mod.chatText([{ role: 'user', content: 'hi' }]);
+    expect(result.ok).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    for (const [url] of fetch.mock.calls) {
+      expect(url).toBe('https://openrouter.ai/api/v1/chat/completions');
+    }
+  });
+
+  it('stops immediately on a rejected key (401) instead of burning the whole fallback chain', async () => {
+    mod.setStoredKey('sk-or-v1-bad');
+    fetch.mockResolvedValue({ ok: false, status: 401, json: async () => ({ error: { message: 'invalid key' } }) });
+    const result = await mod.chatText([{ role: 'user', content: 'hi' }]);
+    expect(result.ok).toBe(false);
+    expect(result.isConfigError).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('chatJSON', () => {
+  it('extracts and parses a JSON object even if the model wraps it in prose', async () => {
+    fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, content: 'Sure! Here you go: {"genre":"house"} hope that helps', model: 'm' }),
+    });
+    const result = await mod.chatJSON([{ role: 'user', content: 'hi' }]);
+    expect(result.ok).toBe(true);
+    expect(result.parsed).toEqual({ genre: 'house' });
+  });
+
+  it('fails cleanly (not throws) on unparseable content', async () => {
+    fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, content: 'no json here at all', model: 'm' }),
+    });
+    const result = await mod.chatJSON([{ role: 'user', content: 'hi' }]);
+    expect(result.ok).toBe(false);
+  });
+});
