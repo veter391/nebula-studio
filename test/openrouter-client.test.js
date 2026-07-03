@@ -83,7 +83,7 @@ describe('chatText — byok mode (key stored)', () => {
   // behavior: real usage shouldn't re-fetch /models on every generate click.
   beforeEach(() => {
     localStorage.setItem(
-      'nebula:free_model_catalog',
+      'nebula:free_model_catalog_v3',
       JSON.stringify({ models: ['test/model-a:free', 'test/model-b:free'], fetchedAt: Date.now() })
     );
   });
@@ -141,6 +141,22 @@ describe('getFreeModelChain — dynamic catalog with layered fallback', () => {
     expect(chain).toEqual(['big/model:free', 'small/model:free']);
   });
 
+  it('moves a known fast instruct model to the front, ahead of a bigger model', async () => {
+    fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [
+          { id: 'nousresearch/hermes-3-llama-3.1-405b:free', name: 'Hermes 405B', architecture: { modality: 'text->text' } },
+          { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'Llama 3.3 70B Instruct', architecture: { modality: 'text->text' } },
+        ],
+      }),
+    });
+    const chain = await mod.getFreeModelChain();
+    // 70B is smaller but curated-fast -> must come before the bigger 405B.
+    expect(chain[0]).toBe('meta-llama/llama-3.3-70b-instruct:free');
+    expect(chain).toContain('nousresearch/hermes-3-llama-3.1-405b:free');
+  });
+
   it('caches the result in localStorage so a second call does not re-fetch', async () => {
     fetch.mockResolvedValue({
       ok: true,
@@ -153,7 +169,7 @@ describe('getFreeModelChain — dynamic catalog with layered fallback', () => {
 
   it('falls back to a stale cached catalog if the live fetch fails', async () => {
     localStorage.setItem(
-      'nebula:free_model_catalog',
+      'nebula:free_model_catalog_v3',
       JSON.stringify({ models: ['stale/model:free'], fetchedAt: Date.now() - 999999999 }) // expired TTL
     );
     fetch.mockRejectedValue(new Error('network down'));

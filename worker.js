@@ -23,6 +23,21 @@
  * @module worker
  */
 
+// Known fast, reliable, general instruct models tried FIRST (in this order)
+// when they're still free. The assistant only maps a vibe to a genre -- a
+// mid-size instruct model does that in ~2-4s and just as correctly as a
+// 400B+ reasoning model that takes 20-30s. Ranking purely by size (below)
+// would put the slowest giants in front of every request; this curated
+// front keeps the common path fast. Any that lose free status are skipped
+// and the size-ranked tail (from the live catalog) covers the rest.
+const PREFERRED_FAST = [
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'qwen/qwen3-next-80b-a3b-instruct:free',
+  'openai/gpt-oss-20b:free',
+  'google/gemma-4-31b-it:free',
+  'nvidia/nemotron-nano-9b-v2:free',
+];
+
 // Absolute last resort ONLY -- used if OpenRouter's /models endpoint is
 // unreachable AND there's no cached catalog at all yet (i.e. this Worker
 // isolate has never successfully fetched the live list). Kept short and
@@ -30,12 +45,17 @@
 const HARDCODED_FALLBACK = ['meta-llama/llama-3.3-70b-instruct:free', 'nvidia/nemotron-nano-9b-v2:free'];
 
 const CATALOG_CACHE_TTL_SECONDS = 3600; // 1h -- free-tier catalog doesn't change minute to minute
-const CATALOG_CACHE_URL = 'https://nebula-studio.internal/free-model-catalog'; // cache key only, never fetched
+// Cache key only (never fetched). Bump the suffix whenever the ranking
+// logic changes so a stale cached ordering doesn't linger for up to an hour.
+const CATALOG_CACHE_URL = 'https://nebula-studio.internal/free-model-catalog-v3-fast-first';
 
 // Cloudflare's native rate-limit binding only supports 10s/60s windows
 // (burst protection), not a real "N per hour" quota -- see wrangler.toml.
 const RATE_LIMIT_WINDOW_LABEL = '6 requests per 60s per visitor';
-const REQUEST_TIMEOUT_MS = 25000;
+// Per-model timeout. With reasoning disabled these calls return in 1-3s, so
+// a model still unresponsive at 12s is stuck (rate-limit queue) -- abandon
+// it and try the next rather than making the user wait.
+const REQUEST_TIMEOUT_MS = 12000;
 
 export default {
   async fetch(request, env, ctx) {
@@ -102,14 +122,33 @@ async function pickFreeModels(env, ctx) {
   return HARDCODED_FALLBACK;
 }
 
-/** Extract "text->text" free models and rank by approximate size, then context length. */
+/**
+ * Extract text-capable free models and rank them. Non-reasoning ("instruct")
+ * models are preferred FIRST, then by approximate size. This is a deliberate
+ * UX call: the assistant's job (map a vibe to a genre + seed) is trivial and
+ * doesn't need chain-of-thought, but reasoning models spend 8-20s "thinking"
+ * before answering, which feels like a hang. A fast 70B instruct model does
+ * this in ~2s and just as correctly. Big reasoning models stay in the chain
+ * as a fallback, just not in front of every request.
+ */
 function rankFreeModels(models) {
-  return models
+  const ranked = models
     .filter((m) => m.id?.endsWith(':free'))
     .filter((m) => m.architecture?.modality === 'text->text' || m.architecture?.input_modalities?.includes('text'))
-    .map((m) => ({ id: m.id, size: parseParamCount(m.name, m.description), ctx: m.context_length || 0 }))
-    .sort((a, b) => b.size - a.size || b.ctx - a.ctx)
+    .map((m) => ({
+      id: m.id,
+      reasoning: m.reasoning?.default_enabled ? 1 : 0,
+      size: parseParamCount(m.name, m.description),
+      ctx: m.context_length || 0,
+    }))
+    .sort((a, b) => a.reasoning - b.reasoning || b.size - a.size || b.ctx - a.ctx)
     .map((m) => m.id);
+
+  // Curated fast models first (if still free), then the size-ranked tail.
+  const available = new Set(ranked);
+  const front = PREFERRED_FAST.filter((id) => available.has(id));
+  const frontSet = new Set(front);
+  return [...front, ...ranked.filter((id) => !frontSet.has(id))];
 }
 
 /** Best-effort "how many billions of parameters" guess from free-text model metadata. */
@@ -180,8 +219,14 @@ async function handleAIProxy(request, env, ctx) {
           model,
           messages,
           temperature: body.temperature ?? 0.6,
-          max_tokens: Math.min(body.maxTokens ?? 300, 700),
+          max_tokens: Math.min(body.maxTokens ?? 600, 800),
           response_format: { type: 'json_object' },
+          // Mapping a vibe to a genre needs no chain-of-thought. Disabling
+          // reasoning makes reasoning-capable models answer directly instead
+          // of "thinking" for 8-20s first, and frees the whole token budget
+          // for the JSON (so it can't truncate mid-object). Measured ~3x
+          // faster on gpt-oss; ignored gracefully by models without it.
+          reasoning: { enabled: false },
         }),
         signal: controller.signal,
       });
@@ -197,6 +242,15 @@ async function handleAIProxy(request, env, ctx) {
         lastError = 'Empty completion';
         continue;
       }
+      // The caller always wants JSON — validate it actually parses before
+      // returning. A truncated / non-JSON answer (some free models ignore
+      // response_format, or run out of tokens mid-object) is treated as a
+      // failure so we fall through to the next model instead of handing the
+      // browser a broken string it can't use.
+      if (!isValidJsonObject(content)) {
+        lastError = `${model} returned non-JSON / truncated output`;
+        continue;
+      }
       return json({ ok: true, content, model });
     } catch (e) {
       clearTimeout(timer);
@@ -205,6 +259,18 @@ async function handleAIProxy(request, env, ctx) {
   }
 
   return json({ ok: false, error: `All shared models failed. Last error: ${lastError}` }, 502);
+}
+
+/** True if `text` contains a parseable JSON object (tolerating prose around it). */
+function isValidJsonObject(text) {
+  const match = String(text).match(/\{[\s\S]*\}/);
+  if (!match) return false;
+  try {
+    const parsed = JSON.parse(match[0]);
+    return parsed && typeof parsed === 'object';
+  } catch {
+    return false;
+  }
 }
 
 function json(data, status = 200) {

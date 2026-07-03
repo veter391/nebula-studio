@@ -235,6 +235,11 @@ function wireAIAssistant(host) {
   const input = host.querySelector('#aiAssistantPrompt');
   const goBtn = host.querySelector('#aiAssistantGo');
   const status = host.querySelector('#aiAssistantStatus');
+  // The genre <select> lives in the presets bar; grab it here so the
+  // AI-failure fallback below can roll a pattern in the selected genre.
+  // (Previously referenced an out-of-scope `sel`, which threw
+  // "sel is not defined" the moment the AI call failed.)
+  const genreSel = host.querySelector('#aiGenre');
 
   keyBtn.addEventListener('click', () => openAISettingsModal(keyBtn));
 
@@ -267,13 +272,19 @@ function wireAIAssistant(host) {
       // free model) — the assistant must never leave the app stuck. Fall
       // back to the same deterministic roll the 🎲 button uses, clearly
       // labeled as a fallback rather than pretending the AI call succeeded.
-      const genre = sel.value;
+      const genre = genreSel?.value || 'house';
       const seed = Date.now() + Math.floor(Math.random() * 1e9);
       const gen = AI.generatePattern(genre, seed);
       store.set({ pattern: gen.pattern, bpm: gen.bpm, swing: gen.swing });
       status.className = 'ai-assistant__status ai-assistant__status--warn';
-      status.textContent = `AI unavailable (${result.error}) — rolled a ${AI.genreLabels[genre]} pattern instead.`;
-      showToast(`AI unavailable — rolled a ${AI.genreLabels[genre]} pattern instead`);
+      // The shared free key has a per-day cap shared by everyone; when it's
+      // hit, point the user at their own key (which bypasses it) rather than
+      // showing a raw upstream error.
+      const quotaHit = /rate.?limit|per-day|429|quota/i.test(result.error || '');
+      status.textContent = quotaHit
+        ? `Shared free AI is out of requests for now — rolled a ${AI.genreLabels[genre]} beat instead. Add your own free key via ✨ for no limits.`
+        : `AI unavailable (${result.error}) — rolled a ${AI.genreLabels[genre]} pattern instead.`;
+      showToast(`AI unavailable — rolled a ${AI.genreLabels[genre]} beat instead`);
       return;
     }
 

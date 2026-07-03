@@ -24,7 +24,7 @@ const MODELS_URL = 'https://openrouter.ai/api/v1/models';
 const PROXY_URL = '/api/ai';
 const STORAGE_KEY = 'nebula:openrouter_key';
 const STORAGE_MODEL_KEY = 'nebula:openrouter_model';
-const CATALOG_CACHE_KEY = 'nebula:free_model_catalog';
+const CATALOG_CACHE_KEY = 'nebula:free_model_catalog_v3'; // bump when ranking changes to drop stale ordering
 const CATALOG_CACHE_TTL_MS = 60 * 60 * 1000; // 1h
 const REQUEST_TIMEOUT_MS = 25000;
 
@@ -38,13 +38,15 @@ const REQUEST_TIMEOUT_MS = 25000;
  * reasonable list to show before the live catalog has loaded.
  */
 export const FREE_MODEL_CHAIN = [
-  'nvidia/nemotron-3-ultra-550b-a55b:free',
-  'nousresearch/hermes-3-llama-3.1-405b:free',
-  'openai/gpt-oss-120b:free',
-  'nvidia/nemotron-3-super-120b-a12b:free',
-  'qwen/qwen3-next-80b-a3b-instruct:free',
+  // Fast instruct models first (see rankFreeModels) — big reasoning models
+  // are correct but slow (8-20s) for this trivial task, kept lower as a net.
   'meta-llama/llama-3.3-70b-instruct:free',
+  'qwen/qwen3-next-80b-a3b-instruct:free',
+  'openai/gpt-oss-120b:free',
   'nvidia/nemotron-nano-9b-v2:free',
+  'nousresearch/hermes-3-llama-3.1-405b:free',
+  'nvidia/nemotron-3-super-120b-a12b:free',
+  'nvidia/nemotron-3-ultra-550b-a55b:free',
   'liquid/lfm-2.5-1.2b-instruct:free',
 ];
 
@@ -97,13 +99,33 @@ export async function getFreeModelChain() {
   return FREE_MODEL_CHAIN;
 }
 
+// Curated fast instruct models first, then a size-ranked tail (reasoning
+// models deprioritized) — a mid-size instruct model maps a vibe to a genre
+// in ~2-4s, where a 400B+ reasoning model takes 20-30s. Same rationale and
+// list as worker.js.
+const PREFERRED_FAST = [
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'qwen/qwen3-next-80b-a3b-instruct:free',
+  'openai/gpt-oss-20b:free',
+  'google/gemma-4-31b-it:free',
+  'nvidia/nemotron-nano-9b-v2:free',
+];
 function rankFreeModels(models) {
-  return models
+  const ranked = models
     .filter((m) => m.id?.endsWith(':free'))
     .filter((m) => m.architecture?.modality === 'text->text' || m.architecture?.input_modalities?.includes('text'))
-    .map((m) => ({ id: m.id, size: parseParamCount(m.name, m.description), ctx: m.context_length || 0 }))
-    .sort((a, b) => b.size - a.size || b.ctx - a.ctx)
+    .map((m) => ({
+      id: m.id,
+      reasoning: m.reasoning?.default_enabled ? 1 : 0,
+      size: parseParamCount(m.name, m.description),
+      ctx: m.context_length || 0,
+    }))
+    .sort((a, b) => a.reasoning - b.reasoning || b.size - a.size || b.ctx - a.ctx)
     .map((m) => m.id);
+  const available = new Set(ranked);
+  const front = PREFERRED_FAST.filter((id) => available.has(id));
+  const frontSet = new Set(front);
+  return [...front, ...ranked.filter((id) => !frontSet.has(id))];
 }
 
 function parseParamCount(name = '', description = '') {
@@ -171,8 +193,12 @@ async function callDirect(model, messages, { apiKey, signal, temperature, maxTok
       model,
       messages,
       temperature: temperature ?? 0.6,
-      max_tokens: maxTokens ?? 300,
+      max_tokens: maxTokens ?? 600,
       response_format: { type: 'json_object' },
+      // No chain-of-thought needed to pick a genre — disabling it makes
+      // reasoning models answer directly (~3x faster) and leaves the whole
+      // token budget for the JSON. See the same note in worker.js.
+      reasoning: { enabled: false },
     }),
     signal,
   });
