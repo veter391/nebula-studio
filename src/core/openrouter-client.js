@@ -193,12 +193,11 @@ async function callDirect(model, messages, { apiKey, signal, temperature, maxTok
       model,
       messages,
       temperature: temperature ?? 0.6,
-      max_tokens: maxTokens ?? 600,
+      // Comfortable budget for reasoning models' thinking + the JSON. Do NOT
+      // send reasoning:{enabled:false} — it 400s on reasoning-mandatory
+      // endpoints. See the same note in worker.js.
+      max_tokens: maxTokens ?? 700,
       response_format: { type: 'json_object' },
-      // No chain-of-thought needed to pick a genre — disabling it makes
-      // reasoning models answer directly (~3x faster) and leaves the whole
-      // token budget for the JSON. See the same note in worker.js.
-      reasoning: { enabled: false },
     }),
     signal,
   });

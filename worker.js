@@ -52,10 +52,13 @@ const CATALOG_CACHE_URL = 'https://nebula-studio.internal/free-model-catalog-v3-
 // Cloudflare's native rate-limit binding only supports 10s/60s windows
 // (burst protection), not a real "N per hour" quota -- see wrangler.toml.
 const RATE_LIMIT_WINDOW_LABEL = '6 requests per 60s per visitor';
-// Per-model timeout. With reasoning disabled these calls return in 1-3s, so
-// a model still unresponsive at 12s is stuck (rate-limit queue) -- abandon
-// it and try the next rather than making the user wait.
-const REQUEST_TIMEOUT_MS = 12000;
+// Per-model timeout: a working free model answers in ~2-6s, so one still
+// silent at 10s is stuck (upstream queue) -- abandon it and try the next.
+const REQUEST_TIMEOUT_MS = 10000;
+// Overall wall-clock cap across ALL model attempts. Past this, give up and
+// let the client fall back to an instant deterministic roll instead of
+// stacking timeout after timeout (which is how a request hit 58s before).
+const OVERALL_BUDGET_MS = 22000;
 
 export default {
   async fetch(request, env, ctx) {
@@ -203,7 +206,16 @@ async function handleAIProxy(request, env, ctx) {
 
   const models = await pickFreeModels(env, ctx);
   let lastError = 'Unknown error';
+  const deadline = Date.now() + OVERALL_BUDGET_MS;
   for (const model of models) {
+    // Overall wall-clock cap across all model attempts: if the fast models
+    // are all rate-limited and we're only left with slow ones, stop here
+    // rather than making the user wait 40s+. The client then instantly
+    // rolls a deterministic pattern, so they still get a beat right away.
+    if (Date.now() > deadline) {
+      lastError = 'No model responded within the time budget';
+      break;
+    }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
@@ -219,14 +231,15 @@ async function handleAIProxy(request, env, ctx) {
           model,
           messages,
           temperature: body.temperature ?? 0.6,
-          max_tokens: Math.min(body.maxTokens ?? 600, 800),
+          // Comfortable budget so reasoning models (some can't disable it --
+          // gpt-oss returns 400 if you try) don't truncate the JSON: their
+          // thinking tokens + the object both fit. Do NOT send
+          // reasoning:{enabled:false} -- it 400s on reasoning-mandatory
+          // endpoints and knocks otherwise-fast models (gpt-oss ~1.8s) out
+          // of the pool, leaving only the slow ones. Truncation is instead
+          // prevented by this budget + the JSON validation below.
+          max_tokens: Math.min(body.maxTokens ?? 700, 900),
           response_format: { type: 'json_object' },
-          // Mapping a vibe to a genre needs no chain-of-thought. Disabling
-          // reasoning makes reasoning-capable models answer directly instead
-          // of "thinking" for 8-20s first, and frees the whole token budget
-          // for the JSON (so it can't truncate mid-object). Measured ~3x
-          // faster on gpt-oss; ignored gracefully by models without it.
-          reasoning: { enabled: false },
         }),
         signal: controller.signal,
       });
