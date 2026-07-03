@@ -286,17 +286,45 @@ export class AudioEngine extends Emitter {
     this.emit('step', { step, time });
   }
 
-  _pickTonalOpts(trackId, step) {
-    // simple arpeggiator patterns
-    const scales = {
-      sub: [55, 55, 73.4, 82.4],
-      bass: [55, 55, 73.4, 82.4, 65.4, 73.4],
-      lead: [330, 392, 440, 523, 587, 659, 784, 880],
-      pluck: [440, 523, 659, 784, 880, 784, 659, 523],
-      pad: [220],
+  /**
+   * Set the musical key all tonal tracks play in. `rootMidi` is the key's
+   * root (e.g. 57 = A3), `intervals` the scale as semitone offsets (e.g.
+   * natural minor [0,2,3,5,7,8,10]). Defaults reproduce the original A-minor
+   * feel, so nothing changes until the AI Assistant (or anything else) sets
+   * a key.
+   */
+  setMusicalKey({ rootMidi, intervals } = {}) {
+    this.musicalKey = {
+      rootMidi: Number.isFinite(rootMidi) ? rootMidi : 57,
+      intervals: Array.isArray(intervals) && intervals.length ? intervals : [0, 2, 3, 5, 7, 8, 10],
     };
-    const arr = scales[trackId] || [220];
-    return { freq: arr[step % arr.length], dur: trackId === 'pad' ? 0.95 : 0.3 };
+  }
+
+  _pickTonalOpts(trackId, step) {
+    const key = this.musicalKey || { rootMidi: 57, intervals: [0, 2, 3, 5, 7, 8, 10] };
+    // Per-track arpeggio as SCALE DEGREES (indices into the key's scale),
+    // transposed into each track's register. Keeping this as degrees rather
+    // than fixed Hz is what lets every tonal voice retune to the chosen key.
+    const DEGREES = {
+      sub: [0, 0, 4, 5],
+      bass: [0, 0, 4, 5, 2, 4],
+      lead: [0, 2, 4, 5, 7, 4, 2, 0],
+      pluck: [0, 4, 2, 5, 7, 5, 2, 4],
+      pad: [0],
+    };
+    const OCTAVE = { sub: -24, bass: -12, lead: 12, pluck: 12, pad: 0 };
+    const seq = DEGREES[trackId] || [0];
+    const degree = seq[step % seq.length];
+    const midi = this._degreeToMidi(key, degree, OCTAVE[trackId] || 0);
+    return { freq: midiToFreq(midi), dur: trackId === 'pad' ? 0.95 : 0.3 };
+  }
+
+  /** Map a scale-degree index (can span octaves) to a MIDI note in the key. */
+  _degreeToMidi(key, degree, octaveOffset) {
+    const len = key.intervals.length;
+    const octaves = Math.floor(degree / len);
+    const idx = ((degree % len) + len) % len;
+    return key.rootMidi + octaveOffset + key.intervals[idx] + 12 * octaves;
   }
 
   /* ------------------------------------------------------------------

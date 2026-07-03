@@ -20,29 +20,39 @@
 import { chatJSON } from './core/openrouter-client.js';
 import { AI } from './ai.js';
 import { TRACK_IDS } from './data/tracks.js';
+import { spaceToFx, toneToFilter, keyToMusicalKey } from './ai-mappers.js';
 
 const STEPS = 16;
 
-const SYSTEM_PROMPT = `You are the beat-composer inside Nebula Studio, a 16-step drum machine. From the user's vibe you COMPOSE an original pattern — you decide which steps play, you are not choosing a preset.
+const SYSTEM_PROMPT = `You are the beat-producer inside Nebula Studio, a 16-step drum machine. From the user's vibe you COMPOSE an original beat and shape its sound — you decide everything below, you are not choosing a preset.
 
 The grid is 16 steps = one bar of 4/4. Steps 1,5,9,13 are the strong beats (downbeats); 3,7,11,15 are the backbeats; the rest are offbeats/syncopation.
 
 Tracks you can use (include only the ones you want playing):
-- kick: the pulse. snare/clap: backbeat, usually steps 5 & 13. hat: keeps time (offbeats/16ths). tom, rim: fills & accents. sub, bass: low end / groove. lead, pluck: melodic hooks. pad: sustained atmosphere. fx: risers/impacts.
+- kick: the pulse. snare/clap: backbeat, usually steps 5 & 13. hat: keeps time (offbeats/16ths). tom, rim: fills & accents. sub, bass: low end. lead, pluck: melodic hooks. pad: sustained chord/atmosphere. fx: risers/impacts.
 
-Compose something that genuinely fits the description — sparse and spacious vs dense and driving, straight vs swung, where the accents land. Vary it; don't just do four-on-the-floor every time unless it fits.
+Compose something that genuinely fits the description — sparse and spacious vs dense and driving, straight vs swung, where the accents land. Don't default to four-on-the-floor unless it fits.
+
+You ALSO choose, from these fixed vocabularies (a helper turns them into exact settings, so just pick the best-fitting word — pick the neutral option if unsure):
+- key + scale: which musical key the tonal parts (bass, lead, pluck, pad, sub) play in. key = one of C, C#, D, D#, E, F, F#, G, G#, A, A#, B. scale = "minor" (darker, tense, emotional) or "major" (brighter, happy, open).
+- space: "dry" (tight, no ambience), "medium", "spacious" (roomy, some echo), "cavernous" (huge reverb/echo, dub/ambient). Pick dry for punchy/minimal, spacious/cavernous for dreamy/dub/ambient.
+- tone: "dark" (muffled, lo-fi, underwater), "warm", "neutral", "bright" (crisp, open).
 
 Available genres (pick the closest label): ${AI.genres.join(', ')}.
 
 Respond with ONLY a JSON object:
 {
-  "genre": one of the exact genre labels above,
-  "bpm": integer tempo matching the vibe (chill ~70-95, mid ~100-120, upbeat ~120-135, fast ~140-175),
+  "genre": one of the genre labels above,
+  "bpm": integer tempo (chill ~70-95, mid ~100-120, upbeat ~120-135, fast ~140-175),
   "swing": number 0.0-0.5 (0 = straight, ~0.15-0.25 = human groove),
-  "pattern": { "kick":[16 x 0 or 1], "snare":[...], "hat":[...], ...only the tracks you use... },
-  "reasoning": ONE short sentence on the groove you built and why it fits
+  "key": one of the note names above,
+  "scale": "minor" or "major",
+  "space": one of dry|medium|spacious|cavernous,
+  "tone": one of dark|warm|neutral|bright,
+  "pattern": { "kick":[16 x 0 or 1], "snare":[...], ...only the tracks you use... },
+  "reasoning": ONE short sentence tying the groove, key and sound to the vibe
 }
-Every array you include MUST have exactly 16 numbers, each 0 or 1.`;
+Every pattern array MUST have exactly 16 numbers, each 0 or 1.`;
 
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
 
@@ -67,8 +77,25 @@ function sanitizePattern(aiPattern) {
 }
 
 /**
+ * Build the master-FX overrides (UI units) from the model's space/tone
+ * descriptors. Returns only the knobs the model actually chose (so anything
+ * it left out stays at the app default). null if it chose nothing.
+ */
+function buildFx(space, tone) {
+  const fx = {};
+  const sp = spaceToFx(space);
+  if (sp) {
+    fx.reverb = sp.reverb;
+    fx.delay = sp.delay;
+  }
+  const filter = toneToFilter(tone);
+  if (filter != null) fx.filter = filter;
+  return Object.keys(fx).length ? fx : null;
+}
+
+/**
  * @param {string} promptText - user's natural-language vibe description
- * @returns {Promise<{ok: true, genre: string, reasoning: string, pattern: object, bpm: number, swing: number, model: string, composedByAI: boolean} | {ok: false, error: string, isConfigError?: boolean, isRateLimited?: boolean}>}
+ * @returns {Promise<{ok: true, genre: string, reasoning: string, pattern: object, bpm: number, swing: number, fx: object|null, musicalKey: object|null, keyLabel: string|null, model: string, composedByAI: boolean} | {ok: false, error: string, isConfigError?: boolean, isRateLimited?: boolean}>}
  */
 export async function suggestFromPrompt(promptText) {
   if (!promptText || !promptText.trim()) {
@@ -81,7 +108,7 @@ export async function suggestFromPrompt(promptText) {
   ]);
   if (!result.ok) return result;
 
-  const { genre, bpm, swing, pattern, reasoning } = result.parsed || {};
+  const { genre, bpm, swing, pattern, key, scale, space, tone, reasoning } = result.parsed || {};
 
   const FALLBACK_GENRE = 'house';
   const validGenre = AI.genres.includes(genre) ? genre : FALLBACK_GENRE;
@@ -89,16 +116,16 @@ export async function suggestFromPrompt(promptText) {
   // The model's own composition, structurally validated.
   const aiPattern = sanitizePattern(pattern);
   const composedByAI = aiPattern !== null;
-
-  // If the model gave no usable pattern, fall back to the deterministic
-  // generator so the button still produces a beat.
   const finalPattern = aiPattern || AI.generatePattern(validGenre, Date.now() % 1000000).pattern;
 
-  // Tempo/swing: the model's choice, clamped to safe ranges; sensible
-  // genre-based defaults if it omitted them.
   const genreDefaults = AI.generatePattern(validGenre, 1);
   const finalBpm = Number.isFinite(bpm) ? Math.round(clamp(bpm, 60, 200)) : genreDefaults.bpm;
   const finalSwing = Number.isFinite(swing) ? clamp(swing, 0, 0.6) : genreDefaults.swing;
+
+  // Descriptors → concrete params via the deterministic helpers.
+  const fx = buildFx(space, tone);
+  const musicalKey = keyToMusicalKey(key, scale);
+  const keyLabel = musicalKey ? `${normalizeKeyLabel(key)} ${String(scale).toLowerCase() === 'major' ? 'major' : 'minor'}` : null;
 
   return {
     ok: true,
@@ -107,7 +134,14 @@ export async function suggestFromPrompt(promptText) {
     pattern: finalPattern,
     bpm: finalBpm,
     swing: finalSwing,
+    fx,
+    musicalKey,
+    keyLabel,
     model: result.model,
     composedByAI,
   };
+}
+
+function normalizeKeyLabel(key) {
+  return typeof key === 'string' ? key.trim().toUpperCase().replace('♯', '#') : '';
 }

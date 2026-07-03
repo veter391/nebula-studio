@@ -200,6 +200,10 @@ function mountMaster(host) {
     { param: 'master', min: 0, max: 100, val: 80, label: 'MASTER' },
   ];
 
+  // Setters keyed by param so the AI Assistant can move a knob (visual + audio
+  // both update, since a setter runs the same update() a manual drag does).
+  const setters = {};
+
   knobs.forEach((k) => {
     const knob = document.createElement('div');
     knob.className = 'knob';
@@ -229,6 +233,12 @@ function mountMaster(host) {
       store.setMasterFx(k.param, k.param === 'master' ? val / 100 : k.param === 'filter' ? val : val / 100);
     }
     update();
+
+    // Register a setter (value in the knob's own UI units) for external control.
+    setters[k.param] = (uiVal) => {
+      val = Math.max(k.min, Math.min(k.max, uiVal));
+      update();
+    };
 
     let startY = 0, startVal = val;
     function onMove(e) {
@@ -280,6 +290,13 @@ function mountMaster(host) {
         e.preventDefault();
       }
     });
+  });
+
+  // The AI Assistant emits master-FX values (UI units) here; move the knobs.
+  store.on('aiSetMasterFx', (fx) => {
+    for (const [param, uiVal] of Object.entries(fx || {})) {
+      if (Number.isFinite(uiVal)) setters[param]?.(uiVal);
+    }
   });
 }
 

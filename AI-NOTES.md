@@ -22,16 +22,42 @@ build, different prompts) show it genuinely composing, not templating:
                                                  tom    ......X.......X.
 ```
 
-The honest boundary: the LLM **can't emit audio**, only decide which steps
-trigger. So the deterministic engine (`src/ai.js` voices, FX, scheduler)
-still *synthesises* the sound from the grid the model composed. That's the
-real split — the model composes the rhythm, the engine renders it. If the
-model is unavailable or returns nothing usable, it falls back to the
-deterministic procedural generator so the button always does something.
+The model also **produces**, not just composes: it picks the musical **key
+and scale** (the tonal tracks retune to it), and the **space** and **tone**
+of the mix (which drive the master reverb/delay and the filter — the knobs
+visibly move to what it chose). So one request shapes the groove, the
+melody's key, and the overall sound.
 
-(Earlier versions of this feature only had the model pick a genre label and
-let the deterministic engine roll a template — which was fair to call
-"decorative AI." It now composes the pattern itself.)
+The honest boundary: the LLM **can't emit audio**, only make these
+decisions. So the deterministic engine (`src/core/` voices, FX, scheduler)
+still *synthesises* the sound from what the model composed. That's the real
+split — the model composes and produces, the engine renders. If the model
+is unavailable or returns nothing usable, it falls back to the deterministic
+procedural generator so the button always does something.
+
+(Earlier versions only had the model pick a genre label and let the engine
+roll a template — fair to call "decorative AI." It now composes the pattern
+and shapes the mix itself.)
+
+## Helper-mapped intents (so a weak free model can't produce garbage)
+
+The free models aren't the strongest, so the assistant does **not** ask them
+for precise numbers (reverb 47, filter 3200 Hz, root MIDI 53) — a weak model
+fumbles those. Instead it asks for a choice from a small named vocabulary,
+and deterministic mappers (`src/ai-mappers.js`) turn the choice into correct,
+in-range values:
+
+- `space`: dry / medium / spacious / cavernous → reverb + delay amounts
+- `tone`: dark / warm / neutral / bright → master filter cutoff
+- `key` (C..B) + `scale` (major/minor) → `{rootMidi, intervals}` the engine
+  retunes every tonal voice to
+
+This is the pattern to point at in an interview: **the LLM handles the fuzzy
+part it's good at (interpreting a vibe into a few semantic choices); typed,
+tested, deterministic code handles the precise part it must not get wrong.**
+An unrecognised choice maps to `null` and the caller leaves that setting at
+its default — so the model can only *pick a valid option*, never emit a bad
+value. Covered by `test/ai-mappers.test.js`.
 
 The **Play Along** practice mode (`src/ui/play-along.js`, `src/data/songs.js`)
 is explicitly *not* AI — it's a hand-authored note timeline plus real-time

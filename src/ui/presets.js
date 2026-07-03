@@ -6,6 +6,7 @@
  */
 
 import { store } from '../store.js';
+import { engine } from '../core/engine.js';
 import { showToast } from './shell.js';
 import { PRESETS_BY_GENRE } from '../data/presets.js';
 import { AI } from '../ai.js';
@@ -289,9 +290,15 @@ function wireAIAssistant(host) {
     }
 
     store.set({ pattern: result.pattern, bpm: result.bpm, swing: result.swing });
+    // Retune the tonal voices to the key the model chose (helper-mapped).
+    if (result.musicalKey) engine.setMusicalKey(result.musicalKey);
+    // Move the master-FX knobs to the model's space/tone choices (helper-mapped);
+    // knobs the model didn't specify stay where they are.
+    if (result.fx) store.emit('aiSetMasterFx', result.fx);
     status.className = 'ai-assistant__status ai-assistant__status--ok';
-    status.textContent = `${AI.genreLabels[result.genre] || result.genre} · ${result.reasoning} (${result.model})`;
-    showToast(`AI Assistant: ${AI.genreLabels[result.genre] || result.genre} pattern generated`);
+    const keyBit = result.keyLabel ? ` · ${result.keyLabel}` : '';
+    status.textContent = `${AI.genreLabels[result.genre] || result.genre}${keyBit} · ${result.reasoning} (${result.model})`;
+    showToast(`AI Assistant: ${AI.genreLabels[result.genre] || result.genre} beat composed`);
   };
 
   goBtn.addEventListener('click', run);

@@ -137,4 +137,53 @@ describe('suggestFromPrompt — AI composes the pattern, structure is validated'
     expect(AI.genres).toContain(result.genre);
     expect(result.composedByAI).toBe(false); // no pattern -> deterministic fallback
   });
+
+  it('maps space/tone descriptors into concrete master-FX values', async () => {
+    chatJSON.mockResolvedValue({
+      ok: true,
+      model: 'm',
+      parsed: {
+        genre: 'ambient',
+        space: 'cavernous',
+        tone: 'dark',
+        pattern: { kick: [1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0] },
+      },
+    });
+    const result = await suggestFromPrompt('deep cavernous dark ambient');
+    expect(result.fx.reverb).toBeGreaterThan(40); // cavernous -> lots of reverb
+    expect(result.fx.filter).toBeLessThan(6000); // dark -> filter closed down
+  });
+
+  it('leaves FX untouched (null) when the model gives no space/tone', async () => {
+    chatJSON.mockResolvedValue({
+      ok: true,
+      model: 'm',
+      parsed: { genre: 'house', pattern: { kick: [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0] } },
+    });
+    const result = await suggestFromPrompt('plain house');
+    expect(result.fx).toBeNull();
+  });
+
+  it('maps key + scale into a musical key config and a readable label', async () => {
+    chatJSON.mockResolvedValue({
+      ok: true,
+      model: 'm',
+      parsed: { genre: 'synthwave', key: 'F#', scale: 'minor', pattern: { lead: new Array(16).fill(0).map((_, i) => (i % 4 === 0 ? 1 : 0)) } },
+    });
+    const result = await suggestFromPrompt('moody synthwave in f sharp minor');
+    expect(result.musicalKey.rootMidi).toBe(48 + 6); // F# root
+    expect(result.musicalKey.intervals).toEqual([0, 2, 3, 5, 7, 8, 10]); // minor
+    expect(result.keyLabel).toBe('F# minor');
+  });
+
+  it('leaves the key null when the model gives an invalid/omitted key', async () => {
+    chatJSON.mockResolvedValue({
+      ok: true,
+      model: 'm',
+      parsed: { genre: 'house', key: 'H', pattern: { kick: [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0] } },
+    });
+    const result = await suggestFromPrompt('house');
+    expect(result.musicalKey).toBeNull();
+    expect(result.keyLabel).toBeNull();
+  });
 });

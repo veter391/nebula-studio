@@ -26,7 +26,9 @@ const STORAGE_KEY = 'nebula:openrouter_key';
 const STORAGE_MODEL_KEY = 'nebula:openrouter_model';
 const CATALOG_CACHE_KEY = 'nebula:free_model_catalog_v4'; // bump when ranking changes to drop stale ordering
 const CATALOG_CACHE_TTL_MS = 60 * 60 * 1000; // 1h
-const REQUEST_TIMEOUT_MS = 25000;
+// Total budget for the whole BYOK attempt (walks models until one composes a
+// full grid). Generous — a good composition is worth the wait.
+const REQUEST_TIMEOUT_MS = 40000;
 
 /**
  * Absolute last-resort model list. NOT the primary source of truth for
@@ -137,6 +139,17 @@ function parseParamCount(name = '', description = '') {
   return Math.max(...matches.map((m) => parseFloat(m[1])));
 }
 
+/** Shuffle the capable (preferred) models for per-call variety; keep the tail. */
+function shufflePreferred(models) {
+  const front = models.filter((id) => PREFERRED_MODELS.includes(id));
+  const tail = models.filter((id) => !PREFERRED_MODELS.includes(id));
+  for (let i = front.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [front[i], front[j]] = [front[j], front[i]];
+  }
+  return [...front, ...tail];
+}
+
 export function getStoredKey() {
   try {
     return localStorage.getItem(STORAGE_KEY) || null;
@@ -244,7 +257,12 @@ export async function chatText(messages, opts = {}) {
     if (apiKey) {
       const chain = opts.models || (await getFreeModelChain());
       const preferred = getPreferredModel();
-      const models = preferred ? [preferred, ...chain.filter((m) => m !== preferred)] : chain;
+      // If the user pinned a specific model, honor it first. Otherwise
+      // shuffle the capable tier per call for compositional variety (same
+      // idea as the shared proxy's shufflePreferred).
+      const models = preferred
+        ? [preferred, ...chain.filter((m) => m !== preferred)]
+        : shufflePreferred(chain);
       let lastError = 'Unknown error';
       for (const model of models) {
         try {

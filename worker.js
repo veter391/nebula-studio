@@ -54,14 +54,15 @@ const CATALOG_CACHE_URL = 'https://nebula-studio.internal/free-model-catalog-v4-
 // Cloudflare's native rate-limit binding only supports 10s/60s windows
 // (burst protection), not a real "N per hour" quota -- see wrangler.toml.
 const RATE_LIMIT_WINDOW_LABEL = '6 requests per 60s per visitor';
-// Per-model timeout: generous enough to let a capable model finish (quality
-// is worth a wait), but not so long that a stuck/queued one drags on. A good
-// answer in 15s beats a fast weak one.
-const REQUEST_TIMEOUT_MS = 16000;
+// Per-model timeout: generous enough to let a capable model finish composing
+// a full 16-step grid (quality is worth the wait) without a stuck/queued one
+// dragging on forever.
+const REQUEST_TIMEOUT_MS = 22000;
 // Overall wall-clock cap across ALL model attempts. Past this, give up and
 // let the client fall back to an instant deterministic roll instead of
-// stacking timeout after timeout (which is how a request hit 58s before).
-const OVERALL_BUDGET_MS = 32000;
+// stacking timeout after timeout. Kept a bit above one full per-model
+// timeout so a slow-but-working model still gets a real chance to finish.
+const OVERALL_BUDGET_MS = 40000;
 
 export default {
   async fetch(request, env, ctx) {
@@ -211,7 +212,7 @@ async function handleAIProxy(request, env, ctx) {
     return json({ ok: false, error: 'Prompt too long.' }, 400);
   }
 
-  const models = await pickFreeModels(env, ctx);
+  const models = shufflePreferred(await pickFreeModels(env, ctx));
   let lastError = 'Unknown error';
   const deadline = Date.now() + OVERALL_BUDGET_MS;
   for (const model of models) {
@@ -278,6 +279,24 @@ async function handleAIProxy(request, env, ctx) {
   }
 
   return json({ ok: false, error: `All shared models failed. Last error: ${lastError}` }, 502);
+}
+
+/**
+ * Randomize the order of the capable (preferred) models per request so that
+ * when several are available you get compositional variety -- different
+ * models have different "handwriting" for a groove -- instead of always
+ * hitting the same one. The non-preferred ranked tail stays in place as the
+ * deterministic fallback order. (When the top models are rate-limited, the
+ * chain still walks down to whatever responds, as before.)
+ */
+function shufflePreferred(models) {
+  const front = models.filter((id) => PREFERRED_MODELS.includes(id));
+  const tail = models.filter((id) => !PREFERRED_MODELS.includes(id));
+  for (let i = front.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [front[i], front[j]] = [front[j], front[i]];
+  }
+  return [...front, ...tail];
 }
 
 /** True if `text` contains a parseable JSON object (tolerating prose around it). */
