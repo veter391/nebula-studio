@@ -4,7 +4,7 @@
 
 Zero dependencies. Zero build step. The audio engine and every UI feature run entirely client-side — the only server-side piece is a small, optional proxy that lets the AI Assistant work out of the box without you needing an API key (see [AI Assistant](#-ai-assistant) below); everything else is pure static files you can open from disk or deploy anywhere.
 
-![Nebula Studio](https://img.shields.io/badge/version-2.0-00f5ff?style=flat-square) ![License](https://img.shields.io/badge/license-MIT-ff3df0?style=flat-square) ![No deps](https://img.shields.io/badge/dependencies-0-8b5cf6?style=flat-square) ![WebAudio](https://img.shields.io/badge/Web%20Audio-API-b8ff5c?style=flat-square)
+![Nebula Studio](https://img.shields.io/badge/version-2.9-00f5ff?style=flat-square) ![License](https://img.shields.io/badge/license-MIT-ff3df0?style=flat-square) ![No deps](https://img.shields.io/badge/dependencies-0-8b5cf6?style=flat-square) ![WebAudio](https://img.shields.io/badge/Web%20Audio-API-b8ff5c?style=flat-square)
 
 ### 🎧 [**Try it live**](https://nebula-studio.shypot.com)
 
