@@ -2,6 +2,14 @@ name = "nebula-studio"
 compatibility_date = "2026-01-01"
 main = "worker.js"
 
+# Custom domain: serve the app at nebula-studio.shypot.com (the owner's portfolio
+# zone). Cloudflare creates the DNS record + auto-provisions TLS. workers_dev is
+# kept enabled as a fallback URL (nebula-studio.<sub>.workers.dev).
+workers_dev = true
+routes = [
+  { pattern = "nebula-studio.shypot.com", custom_domain = true }
+]
+
 [assets]
 directory = "."
 binding = "ASSETS"

@@ -232,7 +232,7 @@ async function handleAIProxy(request, env, ctx) {
         headers: {
           Authorization: `Bearer ${env.OPENROUTER_KEY}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://nebula-studio.workers.dev',
+          'HTTP-Referer': 'https://nebula-studio.shypot.com',
           'X-Title': 'Nebula Studio (shared)',
         },
         body: JSON.stringify({
